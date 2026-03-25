@@ -435,12 +435,6 @@
 
     // ─── Download / reset ────────────────────────────────────────────────────
     function triggerDownload(pdfBytes, filename) {
-      const MAX_BYTES = 100 * 1024 * 1024; // 100 MB
-      if (pdfBytes.byteLength > MAX_BYTES) {
-        showSection('upload');
-        showError('Output PDF is ' + (pdfBytes.byteLength / 1024 / 1024).toFixed(1) + ' MB — exceeds the 100 MB limit. Try fewer or smaller images.');
-        return;
-      }
       if (lastDownloadUrl) URL.revokeObjectURL(lastDownloadUrl);
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       lastDownloadUrl = URL.createObjectURL(blob);
@@ -536,29 +530,30 @@
 
     // ─── Image mode pipeline ─────────────────────────────────────────────────
     async function runImageMode(files, onProgress) {
+      const TARGET_BYTES = 90 * 1024 * 1024; // 90 MB image budget
       const { PDFDocument } = PDFLib;
       const total = files.length;
-      // currentPage tracks which page we're OCR-ing so the logger can compute overall %
       let currentPage = 0;
 
       const worker = await Tesseract.createWorker('eng', 1, {
         logger: m => {
           if (m.status === 'recognizing text') {
-            // Each page's OCR occupies 80% of its slice; load/save each get 10%
-            const pageBase = (currentPage / total) * 100;
-            const pageSlice = (1 / total) * 100;
+            // OCR occupies 0–70% of the bar; each page gets an equal slice
+            const pageBase = (currentPage / total) * 70;
+            const pageSlice = (1 / total) * 70;
             const pct = pageBase + pageSlice * (0.1 + m.progress * 0.8);
             setProgress(pct, 'OCR — page ' + (currentPage + 1) + ' of ' + total + '…');
           }
         }
       });
-      const pdfDoc = await PDFDocument.create();
 
       try {
+        // Pass 1: load every image, run OCR, encode at default quality, keep canvas
+        const pages = [];
         for (let i = 0; i < total; i++) {
           currentPage = i;
-          const pageBase = (i / total) * 100;
-          const pageSlice = (1 / total) * 100;
+          const pageBase = (i / total) * 70;
+          const pageSlice = (1 / total) * 70;
           setProgress(pageBase, 'Loading image ' + (i + 1) + ' of ' + total + '…');
           document.getElementById('status-note').textContent = total > 1 ? 'Page ' + (i + 1) + ' of ' + total : '';
 
@@ -566,22 +561,37 @@
           const canvas = imageToCanvas(img, 2400);
           URL.revokeObjectURL(img._objectURL);
 
-          const imgW = canvas.width;
-          const imgH = canvas.height;
-
           const { data } = await worker.recognize(canvas);
           const words = (data.words || []).filter(w => w.text && w.text.trim());
 
-          setProgress(pageBase + pageSlice * 0.9, 'Building PDF…');
+          setProgress(pageBase + pageSlice * 0.9, 'Encoding image ' + (i + 1) + '…');
           const jpegBytes = await canvasToJpegBytes(canvas, 0.85);
-          releaseCanvas(canvas);
+          pages.push({ canvas, jpegBytes, words, imgW: canvas.width, imgH: canvas.height });
+          setProgress(pageBase + pageSlice, 'Page ' + (i + 1) + ' done');
+        }
 
+        // Check total JPEG size; if over budget, re-encode at a reduced quality
+        const totalJpeg = pages.reduce((s, p) => s + p.jpegBytes.byteLength, 0);
+        if (totalJpeg > TARGET_BYTES) {
+          const quality = Math.max(0.3, 0.85 * (TARGET_BYTES / totalJpeg));
+          setProgress(72, 'Adjusting compression…');
+          for (let i = 0; i < pages.length; i++) {
+            pages[i].jpegBytes = await canvasToJpegBytes(pages[i].canvas, quality);
+          }
+        }
+
+        // Release canvases — no longer needed
+        pages.forEach(p => releaseCanvas(p.canvas));
+
+        // Pass 2: build PDF
+        const pdfDoc = await PDFDocument.create();
+        for (let i = 0; i < pages.length; i++) {
+          const { jpegBytes, words, imgW, imgH } = pages[i];
+          setProgress(75 + (i / total) * 22, 'Building PDF — page ' + (i + 1) + '…');
           const page = pdfDoc.addPage([imgW, imgH]);
           const pdfImg = await pdfDoc.embedJpg(jpegBytes);
           page.drawImage(pdfImg, { x: 0, y: 0, width: imgW, height: imgH });
-
           await addInvisibleTextLayer(page, words, imgW, imgH);
-          setProgress(pageBase + pageSlice, 'Page ' + (i + 1) + ' done');
         }
 
         setProgress(99, 'Saving PDF…');
