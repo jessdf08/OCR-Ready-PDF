@@ -481,82 +481,37 @@
 
     // ─── Invisible text layer ─────────────────────────────────────────────────
     async function addInvisibleTextLayer(page, words, imgWidth, imgHeight) {
-      const { StandardFonts, PDFName } = PDFLib;
-      const pdfDoc = page.doc;
-
-      // Embed Helvetica (built-in, no extra data)
-      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-      page.node.setFontDictionary(PDFName.of('F1'), font.ref);
-
+      // Use only pdf-lib's public drawText API with opacity:0 (invisible but searchable).
+      // Text extraction by PDF readers works on the content stream regardless of opacity.
+      const font = await page.doc.embedFont(PDFLib.StandardFonts.Helvetica);
       const { width: pageW, height: pageH } = page.getSize();
       const scaleX = pageW / imgWidth;
       const scaleY = pageH / imgHeight;
 
-      const parts = ['BT', '/F1 1 Tf', '3 Tr']; // 3 Tr = invisible rendering mode
-
       for (let i = 0; i < words.length; i++) {
         const word = words[i];
-        const text = (word.text || '').trim();
+        // Strip non-ASCII — Helvetica only covers printable Latin
+        const text = (word.text || '').replace(/[^\x20-\x7E]/g, ' ').trim();
         if (!text) continue;
 
-        const bbox = word.bbox;
-        const x0 = bbox.x0, y0 = bbox.y0, x1 = bbox.x1, y1 = bbox.y1;
+        const { x0, y0, x1, y1 } = word.bbox;
         if (x1 <= x0 || y1 <= y0) continue;
 
-        // Convert to PDF coordinate space
-        // PDF origin is bottom-left; Tesseract origin is top-left
+        // Tesseract: origin top-left, y increases downward
+        // PDF: origin bottom-left, y increases upward
         const pdfX = x0 * scaleX;
-        const pdfY = pageH - (y1 * scaleY); // y1 = bottom of word in Tesseract → baseline in PDF
-        const fontSize = (y1 - y0) * scaleY;
-        if (fontSize < 1) continue;
+        const pdfY = pageH - (y1 * scaleY); // y1 = bottom of word box → PDF baseline
+        const fontSize = Math.max(1, (y1 - y0) * scaleY);
 
-        // Scale text horizontally to fill the word bounding box
-        let naturalW;
-        try {
-          naturalW = font.widthOfTextAtSize(text, fontSize);
-        } catch (_) {
-          naturalW = text.length * fontSize * 0.5;
-        }
-        const targetW = (x1 - x0) * scaleX;
-        const hScale = naturalW > 0
-          ? Math.min(Math.max((targetW / naturalW) * 100, 10), 1000)
-          : 100;
-
-        // Escape for PDF literal string syntax, strip non-ASCII (Helvetica is Latin only)
-        const escaped = text
-          .replace(/\\/g, '\\\\')
-          .replace(/\(/g, '\\(')
-          .replace(/\)/g, '\\)')
-          .replace(/[^\x20-\x7E]/g, ' ')
-          .trim();
-        if (!escaped) continue;
-
-        // Tm sets the text matrix: [fontSize 0 0 fontSize x y]
-        parts.push(hScale.toFixed(2) + ' Tz');
-        parts.push(
-          fontSize.toFixed(3) + ' 0 0 ' + fontSize.toFixed(3) + ' ' +
-          pdfX.toFixed(3) + ' ' + pdfY.toFixed(3) + ' Tm'
-        );
-        parts.push('(' + escaped + ') Tj');
+        page.drawText(text, {
+          x: pdfX,
+          y: pdfY,
+          size: fontSize,
+          font: font,
+          color: PDFLib.rgb(0, 0, 0),
+          opacity: 0,
+        });
       }
-
-      parts.push('ET');
-
-      // Append as a compressed content stream
-      let streamRef;
-      try {
-        streamRef = pdfDoc.context.register(
-          pdfDoc.context.flateStream(parts.join('\n'))
-        );
-      } catch (_) {
-        // Fallback: uncompressed stream if flateStream is unavailable
-        const bytes = new TextEncoder().encode(parts.join('\n'));
-        streamRef = pdfDoc.context.register(
-          pdfDoc.context.stream(bytes, { Length: pdfDoc.context.obj(bytes.length) })
-        );
-      }
-
-      page.node.addContentStreams(streamRef);
     }
 
     // ─── Image mode pipeline ─────────────────────────────────────────────────
