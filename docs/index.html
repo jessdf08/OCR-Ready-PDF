@@ -556,7 +556,15 @@
         );
       }
 
-      page.node.addContentStreams(streamRef);
+      // addContentStreams is not exposed on all CDN builds — manually update Contents
+      const contentsKey = PDFLib.PDFName.of('Contents');
+      const existing = page.node.get(contentsKey);
+      if (existing) {
+        // After drawImage, Contents is a single PDFRef — replace with [existing, newStream]
+        page.node.set(contentsKey, pdfDoc.context.obj([existing, streamRef]));
+      } else {
+        page.node.set(contentsKey, streamRef);
+      }
     }
 
     // ─── Image mode pipeline ─────────────────────────────────────────────────
