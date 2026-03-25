@@ -355,6 +355,10 @@
     let currentMode = 'images';
     let lastDownloadUrl = null;
 
+    // Output page size: 8.5" × 11" at 72 pts/inch
+    const PAGE_W = 612;
+    const PAGE_H = 792;
+
     // ─── UI helpers ──────────────────────────────────────────────────────────
     function showSection(name) {
       ['upload', 'status', 'done'].forEach(id => {
@@ -484,7 +488,7 @@
         canvas.toBlob(blob => {
           if (!blob) { reject(new Error('Image encoding failed. Try a different browser.')); return; }
           blob.arrayBuffer().then(resolve).catch(reject);
-        }, 'image/jpeg', quality || 0.85);
+        }, 'image/jpeg', quality || 1.0);
       });
     }
 
@@ -494,13 +498,13 @@
     }
 
     // ─── Invisible text layer ─────────────────────────────────────────────────
-    async function addInvisibleTextLayer(page, words, imgWidth, imgHeight) {
+    async function addInvisibleTextLayer(page, words, imgWidth, imgHeight, drawX, drawY, drawW, drawH) {
       // Use only pdf-lib's public drawText API with opacity:0 (invisible but searchable).
       // Text extraction by PDF readers works on the content stream regardless of opacity.
       const font = await page.doc.embedFont(PDFLib.StandardFonts.Helvetica);
-      const { width: pageW, height: pageH } = page.getSize();
-      const scaleX = pageW / imgWidth;
-      const scaleY = pageH / imgHeight;
+      // drawX/Y/W/H describe where the image sits on the page (may have white margins)
+      const scaleX = drawW / imgWidth;
+      const scaleY = drawH / imgHeight;
 
       for (let i = 0; i < words.length; i++) {
         const word = words[i];
@@ -512,9 +516,9 @@
         if (x1 <= x0 || y1 <= y0) continue;
 
         // Tesseract: origin top-left, y increases downward
-        // PDF: origin bottom-left, y increases upward
-        const pdfX = x0 * scaleX;
-        const pdfY = pageH - (y1 * scaleY); // y1 = bottom of word box → PDF baseline
+        // PDF: origin bottom-left, y increases upward; drawY is bottom edge of image
+        const pdfX = drawX + x0 * scaleX;
+        const pdfY = drawY + drawH - (y1 * scaleY); // y1 = bottom of word box → PDF baseline
         const fontSize = Math.max(1, (y1 - y0) * scaleY);
 
         page.drawText(text, {
@@ -530,29 +534,33 @@
 
     // ─── Image mode pipeline ─────────────────────────────────────────────────
     async function runImageMode(files, onProgress) {
+      const TARGET_BYTES = 90 * 1024 * 1024; // 90 MB image budget
       const { PDFDocument } = PDFLib;
       const total = files.length;
-      // currentPage tracks which page we're OCR-ing so the logger can compute overall %
       let currentPage = 0;
 
       const worker = await Tesseract.createWorker('eng', 1, {
         logger: m => {
           if (m.status === 'recognizing text') {
-            // Each page's OCR occupies 80% of its slice; load/save each get 10%
-            const pageBase = (currentPage / total) * 100;
-            const pageSlice = (1 / total) * 100;
+            // OCR occupies 0–70% of the bar; each page gets an equal slice
+            const pageBase = (currentPage / total) * 70;
+            const pageSlice = (1 / total) * 70;
             const pct = pageBase + pageSlice * (0.1 + m.progress * 0.8);
             setProgress(pct, 'OCR — page ' + (currentPage + 1) + ' of ' + total + '…');
           }
         }
       });
-      const pdfDoc = await PDFDocument.create();
 
       try {
-        for (let i = 0; i < total; i++) {
+        const SAMPLE_SIZE = Math.min(5, total);
+        let quality = 1.0;
+        const pages = [];
+
+        // Helper: process one image through OCR and JPEG encode
+        async function processImage(i, q) {
           currentPage = i;
-          const pageBase = (i / total) * 100;
-          const pageSlice = (1 / total) * 100;
+          const pageBase = (i / total) * 70;
+          const pageSlice = (1 / total) * 70;
           setProgress(pageBase, 'Loading image ' + (i + 1) + ' of ' + total + '…');
           document.getElementById('status-note').textContent = total > 1 ? 'Page ' + (i + 1) + ' of ' + total : '';
 
@@ -560,22 +568,53 @@
           const canvas = imageToCanvas(img, 2400);
           URL.revokeObjectURL(img._objectURL);
 
-          const imgW = canvas.width;
-          const imgH = canvas.height;
-
           const { data } = await worker.recognize(canvas);
           const words = (data.words || []).filter(w => w.text && w.text.trim());
 
-          setProgress(pageBase + pageSlice * 0.9, 'Building PDF…');
-          const jpegBytes = await canvasToJpegBytes(canvas, 0.85);
-          releaseCanvas(canvas);
-
-          const page = pdfDoc.addPage([imgW, imgH]);
-          const pdfImg = await pdfDoc.embedJpg(jpegBytes);
-          page.drawImage(pdfImg, { x: 0, y: 0, width: imgW, height: imgH });
-
-          await addInvisibleTextLayer(page, words, imgW, imgH);
+          setProgress(pageBase + pageSlice * 0.9, 'Encoding image ' + (i + 1) + '…');
+          const jpegBytes = await canvasToJpegBytes(canvas, q);
           setProgress(pageBase + pageSlice, 'Page ' + (i + 1) + ' done');
+          return { canvas, jpegBytes, words, imgW: canvas.width, imgH: canvas.height };
+        }
+
+        // Sample first SAMPLE_SIZE images at default quality to estimate average size
+        for (let i = 0; i < SAMPLE_SIZE; i++) {
+          pages.push(await processImage(i, 1.0));
+        }
+
+        // Project total size; adjust quality before processing remaining images
+        const sampleBytes = pages.reduce((s, p) => s + p.jpegBytes.byteLength, 0);
+        const projectedTotal = (sampleBytes / SAMPLE_SIZE) * total;
+        if (projectedTotal > TARGET_BYTES) {
+          quality = Math.max(0.3, TARGET_BYTES / projectedTotal);
+          // Re-encode sample pages at the adjusted quality
+          for (let i = 0; i < pages.length; i++) {
+            pages[i].jpegBytes = await canvasToJpegBytes(pages[i].canvas, quality);
+          }
+        }
+
+        // Release sample canvases, then process remaining images at final quality
+        pages.forEach(p => releaseCanvas(p.canvas));
+        for (let i = SAMPLE_SIZE; i < total; i++) {
+          const page = await processImage(i, quality);
+          releaseCanvas(page.canvas);
+          pages.push(page);
+        }
+
+        // Pass 2: build PDF
+        const pdfDoc = await PDFDocument.create();
+        for (let i = 0; i < pages.length; i++) {
+          const { jpegBytes, words, imgW, imgH } = pages[i];
+          setProgress(75 + (i / total) * 22, 'Building PDF — page ' + (i + 1) + '…');
+          const scale = Math.min(PAGE_W / imgW, PAGE_H / imgH);
+          const drawW = imgW * scale;
+          const drawH = imgH * scale;
+          const drawX = (PAGE_W - drawW) / 2;
+          const drawY = (PAGE_H - drawH) / 2;
+          const page = pdfDoc.addPage([PAGE_W, PAGE_H]);
+          const pdfImg = await pdfDoc.embedJpg(jpegBytes);
+          page.drawImage(pdfImg, { x: drawX, y: drawY, width: drawW, height: drawH });
+          await addInvisibleTextLayer(page, words, imgW, imgH, drawX, drawY, drawW, drawH);
         }
 
         setProgress(99, 'Saving PDF…');
@@ -587,6 +626,7 @@
 
     // ─── PDF mode pipeline ────────────────────────────────────────────────────
     async function runPdfMode(file, onProgress) {
+      const TARGET_BYTES = 90 * 1024 * 1024;
       const { PDFDocument } = PDFLib;
 
       setProgress(2, 'Opening PDF…');
@@ -600,6 +640,11 @@
 
       const numPages = pdfjsDoc.numPages;
       let currentPage = 0;
+
+      // Use input file size as a proxy to decide quality upfront
+      const quality = file.size > TARGET_BYTES
+        ? Math.max(0.3, TARGET_BYTES / file.size)
+        : 1.0;
 
       const worker = await Tesseract.createWorker('eng', 1, {
         logger: m => {
@@ -639,20 +684,21 @@
           const words = (data.words || []).filter(w => w.text && w.text.trim());
 
           setProgress(pageBase + pageSlice * 0.9, 'Building PDF…');
-          const jpegBytes = await canvasToJpegBytes(canvas, 0.85);
+          const jpegBytes = await canvasToJpegBytes(canvas, quality);
           releaseCanvas(canvas);
 
-          // Output page uses the original PDF dimensions (1x viewport = points)
-          const viewport1x = pdfjsPage.getViewport({ scale: 1.0 });
-          const pageW = viewport1x.width;
-          const pageH = viewport1x.height;
+          // Fit rendered page into 8.5"×11" portrait with white margins
+          const scale = Math.min(PAGE_W / imgW, PAGE_H / imgH);
+          const drawW = imgW * scale;
+          const drawH = imgH * scale;
+          const drawX = (PAGE_W - drawW) / 2;
+          const drawY = (PAGE_H - drawH) / 2;
 
-          const outPage = outDoc.addPage([pageW, pageH]);
+          const outPage = outDoc.addPage([PAGE_W, PAGE_H]);
           const pdfImg  = await outDoc.embedJpg(jpegBytes);
-          outPage.drawImage(pdfImg, { x: 0, y: 0, width: pageW, height: pageH });
+          outPage.drawImage(pdfImg, { x: drawX, y: drawY, width: drawW, height: drawH });
 
-          // imgW/imgH are 2x canvas dimensions; addInvisibleTextLayer handles the scale
-          await addInvisibleTextLayer(outPage, words, imgW, imgH);
+          await addInvisibleTextLayer(outPage, words, imgW, imgH, drawX, drawY, drawW, drawH);
           setProgress(pageBase + pageSlice, 'Page ' + pageNum + ' done');
         }
 
