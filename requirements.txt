@@ -2,3 +2,5 @@ Pillow>=10.0.0
 pytesseract>=0.3.10
 pypdf>=4.0.0
 pdf2image>=1.17.0
+flask>=3.0.0
+gunicorn>=22.0.0

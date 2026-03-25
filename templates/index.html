@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>OCR PDF Converter</title>
+  <style>
+    :root {
+      --accent: #0071e3;
+      --accent-dark: #0051a3;
+      --error: #c0392b;
+      --bg: #f5f5f7;
+      --card: #ffffff;
+      --text: #1d1d1f;
+      --muted: #6e6e73;
+      --border: #d2d2d7;
+      --radius: 14px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: max(24px, env(safe-area-inset-top))
+              max(16px, env(safe-area-inset-right))
+              max(24px, env(safe-area-inset-bottom))
+              max(16px, env(safe-area-inset-left));
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 28px 24px;
+      max-width: 480px;
+      margin: 0 auto;
+      box-shadow: 0 2px 12px rgba(0,0,0,.08);
+    }
+
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: var(--muted);
+      margin-bottom: 24px;
+    }
+
+    /* ---- Mode toggle ---- */
+    .mode-toggle {
+      display: flex;
+      background: var(--bg);
+      border-radius: 10px;
+      padding: 4px;
+      gap: 4px;
+      margin-bottom: 24px;
+    }
+
+    .mode-toggle button {
+      flex: 1;
+      padding: 10px 8px;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+
+    .mode-toggle button.active {
+      background: var(--card);
+      color: var(--text);
+      box-shadow: 0 1px 4px rgba(0,0,0,.12);
+    }
+
+    /* ---- File picker ---- */
+    .file-area { margin-bottom: 20px; }
+
+    input[type="file"] {
+      position: absolute;
+      width: 1px; height: 1px;
+      opacity: 0; overflow: hidden;
+    }
+
+    .file-label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      min-height: 56px;
+      padding: 14px 16px;
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      font-size: 16px;
+      color: var(--accent);
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+      text-align: center;
+    }
+
+    .file-label:hover, .file-label:focus-within {
+      border-color: var(--accent);
+      background: #f0f7ff;
+    }
+
+    .file-name {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 8px;
+      text-align: center;
+      word-break: break-all;
+    }
+
+    /* ---- Primary button ---- */
+    .btn-primary {
+      display: block;
+      width: 100%;
+      min-height: 52px;
+      padding: 14px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 17px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, opacity .15s;
+    }
+
+    .btn-primary:disabled {
+      opacity: .4;
+      cursor: not-allowed;
+    }
+
+    .btn-primary:not(:disabled):hover { background: var(--accent-dark); }
+
+    /* ---- Spinner ---- */
+    .spinner {
+      display: inline-block;
+      width: 32px; height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ---- Status section ---- */
+    #status-section {
+      display: none;
+      text-align: center;
+      padding: 12px 0 4px;
+    }
+
+    .status-text {
+      font-size: 15px;
+      font-weight: 500;
+      margin-top: 12px;
+    }
+
+    .status-note {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    /* ---- Download button ---- */
+    .btn-download {
+      display: block;
+      width: 100%;
+      min-height: 52px;
+      padding: 14px;
+      background: #34c759;
+      color: #fff;
+      border-radius: var(--radius);
+      font-size: 17px;
+      font-weight: 600;
+      text-align: center;
+      text-decoration: none;
+      margin-bottom: 16px;
+    }
+
+    .btn-download:hover { background: #28a745; }
+
+    .btn-secondary {
+      display: block;
+      width: 100%;
+      min-height: 44px;
+      padding: 10px;
+      background: transparent;
+      color: var(--accent);
+      border: none;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    /* ---- Error ---- */
+    .error-box {
+      display: none;
+      background: #fdecea;
+      border: 1px solid #f5c6cb;
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin-bottom: 16px;
+      font-size: 14px;
+      color: var(--error);
+    }
+
+    /* ---- Footer ---- */
+    .footer-note {
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>OCR PDF Converter</h1>
+    <p class="subtitle">Turn photos or scanned PDFs into searchable PDFs.</p>
+
+    <!-- Error banner -->
+    <div class="error-box" id="error-box"></div>
+
+    <!-- Upload form -->
+    <div id="upload-section">
+      <div class="mode-toggle">
+        <button type="button" id="btn-mode-images" class="active" onclick="setMode('images')">
+          Photos / Images
+        </button>
+        <button type="button" id="btn-mode-pdf" onclick="setMode('pdf')">
+          PDF File
+        </button>
+      </div>
+
+      <div class="file-area">
+        <!-- Images input (shown in images mode) -->
+        <div id="picker-images">
+          <label class="file-label" for="input-images">
+            <span>&#128444;</span> Choose photos or images
+          </label>
+          <input type="file" id="input-images"
+                 accept="image/*" multiple
+                 onchange="onFilesChosen(this)">
+          <div class="file-name" id="name-images"></div>
+        </div>
+
+        <!-- PDF input (shown in pdf mode) -->
+        <div id="picker-pdf" style="display:none">
+          <label class="file-label" for="input-pdf">
+            <span>&#128196;</span> Choose a PDF file
+          </label>
+          <input type="file" id="input-pdf"
+                 accept="application/pdf"
+                 onchange="onFilesChosen(this)">
+          <div class="file-name" id="name-pdf"></div>
+        </div>
+      </div>
+
+      <button class="btn-primary" id="btn-convert" disabled onclick="startConversion()">
+        Convert to Searchable PDF
+      </button>
+    </div>
+
+    <!-- Processing status -->
+    <div id="status-section">
+      <div class="spinner" id="spinner"></div>
+      <p class="status-text" id="status-text">Uploading…</p>
+      <p class="status-note" id="status-note"></p>
+    </div>
+
+    <!-- Done: download -->
+    <div id="done-section" style="display:none">
+      <a class="btn-download" id="download-link" href="#">
+        &#8681; Download PDF
+      </a>
+      <button class="btn-secondary" onclick="location.reload()">Convert another file</button>
+    </div>
+
+    <p class="footer-note">Max 300 images or 300 PDF pages &middot; Output capped at 100 MB</p>
+  </div>
+
+  <script>
+    let currentMode = 'images';
+    let pollTimer = null;
+
+    function setMode(mode) {
+      currentMode = mode;
+      document.getElementById('picker-images').style.display = mode === 'images' ? '' : 'none';
+      document.getElementById('picker-pdf').style.display   = mode === 'pdf'    ? '' : 'none';
+      document.getElementById('btn-mode-images').classList.toggle('active', mode === 'images');
+      document.getElementById('btn-mode-pdf').classList.toggle('active',    mode === 'pdf');
+      // clear any previous file selection in the hidden picker
+      const otherId = mode === 'images' ? 'input-pdf' : 'input-images';
+      document.getElementById(otherId).value = '';
+      document.getElementById('name-' + (mode === 'images' ? 'pdf' : 'images')).textContent = '';
+      updateConvertButton();
+    }
+
+    function onFilesChosen(input) {
+      const which = input.id === 'input-images' ? 'images' : 'pdf';
+      const nameEl = document.getElementById('name-' + which);
+      if (input.files.length === 0) {
+        nameEl.textContent = '';
+      } else if (input.files.length === 1) {
+        nameEl.textContent = input.files[0].name;
+      } else {
+        nameEl.textContent = input.files.length + ' files selected';
+      }
+      updateConvertButton();
+    }
+
+    function updateConvertButton() {
+      const inputId = currentMode === 'images' ? 'input-images' : 'input-pdf';
+      const hasFiles = document.getElementById(inputId).files.length > 0;
+      document.getElementById('btn-convert').disabled = !hasFiles;
+    }
+
+    function showError(msg) {
+      const box = document.getElementById('error-box');
+      box.textContent = msg;
+      box.style.display = 'block';
+    }
+
+    function hideError() {
+      document.getElementById('error-box').style.display = 'none';
+    }
+
+    function setStatusText(text, note) {
+      document.getElementById('status-text').textContent = text;
+      document.getElementById('status-note').textContent = note || '';
+    }
+
+    async function startConversion() {
+      hideError();
+      const inputId = currentMode === 'images' ? 'input-images' : 'input-pdf';
+      const input = document.getElementById(inputId);
+      if (!input.files.length) return;
+
+      // Switch to status view
+      document.getElementById('upload-section').style.display = 'none';
+      document.getElementById('status-section').style.display = 'block';
+      setStatusText('Uploading…', '');
+
+      const formData = new FormData();
+      formData.append('mode', currentMode);
+      for (const f of input.files) formData.append('files', f);
+
+      let jobId;
+      try {
+        const res = await fetch('/upload', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Upload failed.');
+        jobId = data.job_id;
+      } catch (err) {
+        showUploadError(err.message);
+        return;
+      }
+
+      setStatusText('Processing…', 'This may take several minutes for large documents. Keep this page open — the server is doing the work.');
+      pollStatus(jobId);
+    }
+
+    function pollStatus(jobId) {
+      pollTimer = setInterval(async () => {
+        try {
+          const res = await fetch('/status/' + jobId);
+          const data = await res.json();
+          if (data.status === 'done') {
+            clearInterval(pollTimer);
+            showDone(jobId);
+          } else if (data.status === 'error') {
+            clearInterval(pollTimer);
+            showUploadError(data.message || 'Conversion failed.');
+          }
+          // else still running — keep polling
+        } catch (_) {
+          // network blip — keep polling
+        }
+      }, 3000);
+    }
+
+    function showDone(jobId) {
+      document.getElementById('status-section').style.display = 'none';
+      document.getElementById('done-section').style.display = 'block';
+      document.getElementById('download-link').href = '/download/' + jobId;
+    }
+
+    function showUploadError(msg) {
+      clearInterval(pollTimer);
+      document.getElementById('status-section').style.display = 'none';
+      document.getElementById('upload-section').style.display = 'block';
+      showError(msg);
+    }
+  </script>
+</body>
+</html>
