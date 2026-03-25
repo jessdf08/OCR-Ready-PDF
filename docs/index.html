@@ -435,6 +435,12 @@
 
     // ─── Download / reset ────────────────────────────────────────────────────
     function triggerDownload(pdfBytes, filename) {
+      const MAX_BYTES = 100 * 1024 * 1024; // 100 MB
+      if (pdfBytes.byteLength > MAX_BYTES) {
+        showSection('upload');
+        showError('Output PDF is ' + (pdfBytes.byteLength / 1024 / 1024).toFixed(1) + ' MB — exceeds the 100 MB limit. Try fewer or smaller images.');
+        return;
+      }
       if (lastDownloadUrl) URL.revokeObjectURL(lastDownloadUrl);
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       lastDownloadUrl = URL.createObjectURL(blob);
