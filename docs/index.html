@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>OCR PDF Converter</title>
+
+  <!-- Load libraries synchronously (order matters — no async/defer) -->
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+
+  <style>
+    :root {
+      --accent: #0071e3;
+      --accent-dark: #0051a3;
+      --error: #c0392b;
+      --bg: #f5f5f7;
+      --card: #ffffff;
+      --text: #1d1d1f;
+      --muted: #6e6e73;
+      --border: #d2d2d7;
+      --radius: 14px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: max(24px, env(safe-area-inset-top))
+              max(16px, env(safe-area-inset-right))
+              max(24px, env(safe-area-inset-bottom))
+              max(16px, env(safe-area-inset-left));
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 28px 24px;
+      max-width: 480px;
+      margin: 0 auto;
+      box-shadow: 0 2px 12px rgba(0,0,0,.08);
+    }
+
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: var(--muted);
+      margin-bottom: 24px;
+    }
+
+    /* ---- Mode toggle ---- */
+    .mode-toggle {
+      display: flex;
+      background: var(--bg);
+      border-radius: 10px;
+      padding: 4px;
+      gap: 4px;
+      margin-bottom: 24px;
+    }
+
+    .mode-toggle button {
+      flex: 1;
+      min-height: 44px;
+      padding: 10px 8px;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+
+    .mode-toggle button.active {
+      background: var(--card);
+      color: var(--text);
+      box-shadow: 0 1px 4px rgba(0,0,0,.12);
+    }
+
+    /* ---- File picker ---- */
+    .file-area { margin-bottom: 20px; }
+
+    input[type="file"] {
+      position: absolute;
+      width: 1px; height: 1px;
+      opacity: 0; overflow: hidden;
+    }
+
+    .file-label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      min-height: 56px;
+      padding: 14px 16px;
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      font-size: 16px;
+      color: var(--accent);
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+      text-align: center;
+    }
+
+    .file-label:hover, .file-label:focus-within {
+      border-color: var(--accent);
+      background: #f0f7ff;
+    }
+
+    .file-name {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 8px;
+      text-align: center;
+      word-break: break-all;
+    }
+
+    /* ---- Primary button ---- */
+    .btn-primary {
+      display: block;
+      width: 100%;
+      min-height: 52px;
+      padding: 14px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 17px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, opacity .15s;
+    }
+
+    .btn-primary:disabled {
+      opacity: .4;
+      cursor: not-allowed;
+    }
+
+    .btn-primary:not(:disabled):hover { background: var(--accent-dark); }
+
+    /* ---- Spinner ---- */
+    .spinner {
+      display: inline-block;
+      width: 32px; height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ---- Status section ---- */
+    #status-section {
+      display: none;
+      text-align: center;
+      padding: 12px 0 4px;
+    }
+
+    .status-text {
+      font-size: 15px;
+      font-weight: 500;
+      margin-top: 12px;
+    }
+
+    .status-note {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    /* ---- Progress bar ---- */
+    .progress-track {
+      width: 100%;
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      margin: 14px 0 4px;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 3px;
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    /* ---- Download button ---- */
+    .btn-download {
+      display: block;
+      width: 100%;
+      min-height: 52px;
+      padding: 14px;
+      background: #34c759;
+      color: #fff;
+      border-radius: var(--radius);
+      font-size: 17px;
+      font-weight: 600;
+      text-align: center;
+      text-decoration: none;
+      margin-bottom: 16px;
+    }
+
+    .btn-download:hover { background: #28a745; }
+
+    .btn-secondary {
+      display: block;
+      width: 100%;
+      min-height: 44px;
+      padding: 10px;
+      background: transparent;
+      color: var(--accent);
+      border: none;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    /* ---- Error ---- */
+    .error-box {
+      display: none;
+      background: #fdecea;
+      border: 1px solid #f5c6cb;
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin-bottom: 16px;
+      font-size: 14px;
+      color: var(--error);
+    }
+
+    /* ---- Warning ---- */
+    .warn-box {
+      display: none;
+      background: #fff8e1;
+      border: 1px solid #ffe082;
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      color: #7c5700;
+    }
+
+    /* ---- Footer ---- */
+    .footer-note {
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>OCR PDF Converter</h1>
+    <p class="subtitle">Turn photos or scanned PDFs into searchable PDFs — right in your browser.</p>
+
+    <!-- Error banner -->
+    <div class="error-box" id="error-box"></div>
+
+    <!-- Warning banner (large file count) -->
+    <div class="warn-box" id="warn-box"></div>
+
+    <!-- Upload form -->
+    <div id="upload-section">
+      <div class="mode-toggle">
+        <button type="button" id="btn-mode-images" class="active" onclick="setMode('images')">
+          Photos / Images
+        </button>
+        <button type="button" id="btn-mode-pdf" onclick="setMode('pdf')">
+          PDF File
+        </button>
+      </div>
+
+      <div class="file-area">
+        <!-- Images input (shown in images mode) -->
+        <div id="picker-images">
+          <label class="file-label" for="input-images">
+            <span>&#128444;</span> Choose photos or images
+          </label>
+          <input type="file" id="input-images"
+                 accept="image/*" multiple
+                 onchange="onFilesChosen(this)">
+          <div class="file-name" id="name-images"></div>
+        </div>
+
+        <!-- PDF input (shown in pdf mode) -->
+        <div id="picker-pdf" style="display:none">
+          <label class="file-label" for="input-pdf">
+            <span>&#128196;</span> Choose a PDF file
+          </label>
+          <input type="file" id="input-pdf"
+                 accept="application/pdf,.pdf"
+                 onchange="onFilesChosen(this)">
+          <div class="file-name" id="name-pdf"></div>
+        </div>
+      </div>
+
+      <button class="btn-primary" id="btn-convert" disabled onclick="startConversion()">
+        Convert to Searchable PDF
+      </button>
+    </div>
+
+    <!-- Processing status -->
+    <div id="status-section">
+      <div class="spinner"></div>
+      <p class="status-text" id="status-text">Initializing…</p>
+      <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress-track">
+        <div class="progress-bar" id="progress-bar"></div>
+      </div>
+      <p class="status-note" id="status-note">First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.</p>
+    </div>
+
+    <!-- Done: download -->
+    <div id="done-section" style="display:none">
+      <a class="btn-download" id="download-link" href="#">
+        &#8681; Download Searchable PDF
+      </a>
+      <p class="status-note" style="margin-bottom:16px">
+        On iPhone: tap above, then use the share sheet to save to Files.
+      </p>
+      <button class="btn-secondary" onclick="resetApp()">Convert another file</button>
+    </div>
+
+    <p class="footer-note">All processing happens in your browser &middot; No files are uploaded</p>
+  </div>
+
+  <script>
+    // Configure PDF.js worker immediately after the scripts have loaded
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+
+    // ─── State ───────────────────────────────────────────────────────────────
+    let currentMode = 'images';
+    let lastDownloadUrl = null;
+
+    // ─── UI helpers ──────────────────────────────────────────────────────────
+    function showSection(name) {
+      ['upload', 'status', 'done'].forEach(id => {
+        document.getElementById(id + '-section').style.display = id === name ? '' : 'none';
+      });
+    }
+
+    function showError(msg) {
+      const box = document.getElementById('error-box');
+      box.textContent = msg;
+      box.style.display = 'block';
+    }
+
+    function hideError() {
+      document.getElementById('error-box').style.display = 'none';
+      document.getElementById('warn-box').style.display = 'none';
+    }
+
+    function showWarn(msg) {
+      const box = document.getElementById('warn-box');
+      box.textContent = msg;
+      box.style.display = 'block';
+    }
+
+    function setStatusText(text, note) {
+      document.getElementById('status-text').textContent = text;
+      if (note !== undefined) document.getElementById('status-note').textContent = note;
+    }
+
+    function updateProgress(completed, total, message) {
+      const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+      const bar = document.getElementById('progress-bar');
+      bar.style.width = pct + '%';
+      document.getElementById('progress-track').setAttribute('aria-valuenow', pct);
+      document.getElementById('status-text').textContent = message;
+      document.getElementById('status-note').textContent = pct + '% — page ' + completed + ' of ' + total;
+    }
+
+    // ─── Mode toggle ─────────────────────────────────────────────────────────
+    function setMode(mode) {
+      currentMode = mode;
+      document.getElementById('picker-images').style.display = mode === 'images' ? '' : 'none';
+      document.getElementById('picker-pdf').style.display   = mode === 'pdf'    ? '' : 'none';
+      document.getElementById('btn-mode-images').classList.toggle('active', mode === 'images');
+      document.getElementById('btn-mode-pdf').classList.toggle('active',    mode === 'pdf');
+      const otherId = mode === 'images' ? 'input-pdf' : 'input-images';
+      document.getElementById(otherId).value = '';
+      document.getElementById('name-' + (mode === 'images' ? 'pdf' : 'images')).textContent = '';
+      hideError();
+      updateConvertButton();
+    }
+
+    function onFilesChosen(input) {
+      const which = input.id === 'input-images' ? 'images' : 'pdf';
+      const nameEl = document.getElementById('name-' + which);
+      if (input.files.length === 0) {
+        nameEl.textContent = '';
+      } else if (input.files.length === 1) {
+        nameEl.textContent = input.files[0].name;
+      } else {
+        nameEl.textContent = input.files.length + ' files selected';
+      }
+      hideError();
+      updateConvertButton();
+    }
+
+    function updateConvertButton() {
+      const inputId = currentMode === 'images' ? 'input-images' : 'input-pdf';
+      document.getElementById('btn-convert').disabled =
+        document.getElementById(inputId).files.length === 0;
+    }
+
+    // ─── Download / reset ────────────────────────────────────────────────────
+    function triggerDownload(pdfBytes, filename) {
+      if (lastDownloadUrl) URL.revokeObjectURL(lastDownloadUrl);
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      lastDownloadUrl = URL.createObjectURL(blob);
+      const link = document.getElementById('download-link');
+      link.href = lastDownloadUrl;
+      link.download = filename;
+      showSection('done');
+    }
+
+    function resetApp() {
+      if (lastDownloadUrl) {
+        URL.revokeObjectURL(lastDownloadUrl);
+        lastDownloadUrl = null;
+      }
+      location.reload();
+    }
+
+    // ─── Image utilities ──────────────────────────────────────────────────────
+    function fileToImage(file) {
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => { img._objectURL = url; resolve(img); };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read image: ' + file.name)); };
+        img.src = url;
+      });
+    }
+
+    function imageToCanvas(img, maxDim) {
+      maxDim = maxDim || 2400;
+      let w = img.naturalWidth;
+      let h = img.naturalHeight;
+      if (Math.max(w, h) > maxDim) {
+        const scale = maxDim / Math.max(w, h);
+        w = Math.round(w * scale);
+        h = Math.round(h * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      return canvas;
+    }
+
+    function canvasToJpegBytes(canvas, quality) {
+      return new Promise((resolve, reject) => {
+        canvas.toBlob(blob => {
+          if (!blob) { reject(new Error('Image encoding failed. Try a different browser.')); return; }
+          blob.arrayBuffer().then(resolve).catch(reject);
+        }, 'image/jpeg', quality || 0.85);
+      });
+    }
+
+    function releaseCanvas(canvas) {
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+
+    // ─── Invisible text layer ─────────────────────────────────────────────────
+    async function addInvisibleTextLayer(page, words, imgWidth, imgHeight) {
+      const { StandardFonts, PDFName } = PDFLib;
+      const pdfDoc = page.doc;
+
+      // Embed Helvetica (built-in, no extra data)
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      page.node.setFontDictionary(PDFName.of('F1'), font.ref);
+
+      const { width: pageW, height: pageH } = page.getSize();
+      const scaleX = pageW / imgWidth;
+      const scaleY = pageH / imgHeight;
+
+      const parts = ['BT', '/F1 1 Tf', '3 Tr']; // 3 Tr = invisible rendering mode
+
+      for (let i = 0; i < words.length; i++) {
+        const word = words[i];
+        const text = (word.text || '').trim();
+        if (!text) continue;
+
+        const bbox = word.bbox;
+        const x0 = bbox.x0, y0 = bbox.y0, x1 = bbox.x1, y1 = bbox.y1;
+        if (x1 <= x0 || y1 <= y0) continue;
+
+        // Convert to PDF coordinate space
+        // PDF origin is bottom-left; Tesseract origin is top-left
+        const pdfX = x0 * scaleX;
+        const pdfY = pageH - (y1 * scaleY); // y1 = bottom of word in Tesseract → baseline in PDF
+        const fontSize = (y1 - y0) * scaleY;
+        if (fontSize < 1) continue;
+
+        // Scale text horizontally to fill the word bounding box
+        let naturalW;
+        try {
+          naturalW = font.widthOfTextAtSize(text, fontSize);
+        } catch (_) {
+          naturalW = text.length * fontSize * 0.5;
+        }
+        const targetW = (x1 - x0) * scaleX;
+        const hScale = naturalW > 0
+          ? Math.min(Math.max((targetW / naturalW) * 100, 10), 1000)
+          : 100;
+
+        // Escape for PDF literal string syntax, strip non-ASCII (Helvetica is Latin only)
+        const escaped = text
+          .replace(/\\/g, '\\\\')
+          .replace(/\(/g, '\\(')
+          .replace(/\)/g, '\\)')
+          .replace(/[^\x20-\x7E]/g, ' ')
+          .trim();
+        if (!escaped) continue;
+
+        // Tm sets the text matrix: [fontSize 0 0 fontSize x y]
+        parts.push(hScale.toFixed(2) + ' Tz');
+        parts.push(
+          fontSize.toFixed(3) + ' 0 0 ' + fontSize.toFixed(3) + ' ' +
+          pdfX.toFixed(3) + ' ' + pdfY.toFixed(3) + ' Tm'
+        );
+        parts.push('(' + escaped + ') Tj');
+      }
+
+      parts.push('ET');
+
+      // Append as a compressed content stream
+      let streamRef;
+      try {
+        streamRef = pdfDoc.context.register(
+          pdfDoc.context.flateStream(parts.join('\n'))
+        );
+      } catch (_) {
+        // Fallback: uncompressed stream if flateStream is unavailable
+        const bytes = new TextEncoder().encode(parts.join('\n'));
+        streamRef = pdfDoc.context.register(
+          pdfDoc.context.stream(bytes, { Length: pdfDoc.context.obj(bytes.length) })
+        );
+      }
+
+      page.node.addContentStreams(streamRef);
+    }
+
+    // ─── Image mode pipeline ─────────────────────────────────────────────────
+    async function runImageMode(files, onProgress) {
+      const { PDFDocument } = PDFLib;
+      const worker = await Tesseract.createWorker('eng', 1);
+      const pdfDoc = await PDFDocument.create();
+      const total = files.length;
+
+      try {
+        for (let i = 0; i < total; i++) {
+          onProgress(i, total, 'Loading image ' + (i + 1) + ' of ' + total + '…');
+
+          const img = await fileToImage(files[i]);
+          const canvas = imageToCanvas(img, 2400);
+          URL.revokeObjectURL(img._objectURL);
+
+          const imgW = canvas.width;
+          const imgH = canvas.height;
+
+          onProgress(i, total, 'OCR — page ' + (i + 1) + ' of ' + total + '…');
+          const { data } = await worker.recognize(canvas);
+          const words = (data.words || []).filter(w => w.text && w.text.trim());
+
+          const jpegBytes = await canvasToJpegBytes(canvas, 0.85);
+          releaseCanvas(canvas);
+
+          const page = pdfDoc.addPage([imgW, imgH]);
+          const pdfImg = await pdfDoc.embedJpg(jpegBytes);
+          page.drawImage(pdfImg, { x: 0, y: 0, width: imgW, height: imgH });
+
+          await addInvisibleTextLayer(page, words, imgW, imgH);
+
+          onProgress(i + 1, total, 'Done page ' + (i + 1) + ' of ' + total);
+        }
+
+        return await pdfDoc.save();
+      } finally {
+        await worker.terminate().catch(() => {});
+      }
+    }
+
+    // ─── PDF mode pipeline ────────────────────────────────────────────────────
+    async function runPdfMode(file, onProgress) {
+      const { PDFDocument } = PDFLib;
+
+      const arrayBuffer = await file.arrayBuffer();
+      let pdfjsDoc;
+      try {
+        pdfjsDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      } catch (e) {
+        throw new Error('Could not open the PDF. It may be password-protected or corrupted.');
+      }
+
+      const numPages = pdfjsDoc.numPages;
+      const worker = await Tesseract.createWorker('eng', 1);
+      const outDoc = await PDFDocument.create();
+
+      try {
+        for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+          onProgress(pageNum - 1, numPages, 'Rendering page ' + pageNum + ' of ' + numPages + '…');
+
+          const pdfjsPage = await pdfjsDoc.getPage(pageNum);
+
+          // Render at 2x for better OCR quality
+          const viewport2x = pdfjsPage.getViewport({ scale: 2.0 });
+          const canvas = document.createElement('canvas');
+          canvas.width  = Math.round(viewport2x.width);
+          canvas.height = Math.round(viewport2x.height);
+          await pdfjsPage.render({ canvasContext: canvas.getContext('2d'), viewport: viewport2x }).promise;
+
+          const imgW = canvas.width;
+          const imgH = canvas.height;
+
+          onProgress(pageNum - 1, numPages, 'OCR — page ' + pageNum + ' of ' + numPages + '…');
+          const { data } = await worker.recognize(canvas);
+          const words = (data.words || []).filter(w => w.text && w.text.trim());
+
+          const jpegBytes = await canvasToJpegBytes(canvas, 0.85);
+          releaseCanvas(canvas);
+
+          // Output page uses the original PDF dimensions (1x viewport = points)
+          const viewport1x = pdfjsPage.getViewport({ scale: 1.0 });
+          const pageW = viewport1x.width;
+          const pageH = viewport1x.height;
+
+          const outPage = outDoc.addPage([pageW, pageH]);
+          const pdfImg  = await outDoc.embedJpg(jpegBytes);
+          outPage.drawImage(pdfImg, { x: 0, y: 0, width: pageW, height: pageH });
+
+          // imgW/imgH are 2x canvas dimensions; addInvisibleTextLayer handles the scale
+          await addInvisibleTextLayer(outPage, words, imgW, imgH);
+
+          onProgress(pageNum, numPages, 'Done page ' + pageNum + ' of ' + numPages);
+        }
+
+        return await outDoc.save();
+      } finally {
+        await worker.terminate().catch(() => {});
+        pdfjsDoc.destroy();
+      }
+    }
+
+    // ─── Entry point ─────────────────────────────────────────────────────────
+    async function startConversion() {
+      hideError();
+
+      const inputEl = document.getElementById(currentMode === 'images' ? 'input-images' : 'input-pdf');
+      const files = Array.from(inputEl.files);
+
+      if (!files.length) { showError('No files selected.'); return; }
+
+      if (currentMode === 'pdf') {
+        if (files.length !== 1) { showError('Please select exactly one PDF file.'); return; }
+        if (!files[0].name.toLowerCase().endsWith('.pdf') && files[0].type !== 'application/pdf') {
+          showError('Selected file does not appear to be a PDF.'); return;
+        }
+      }
+
+      // Warn for large batches (can't know page count for PDF yet)
+      if (files.length > 50) {
+        showWarn('Processing ' + files.length + ' images may be slow or use a lot of memory on mobile. Consider smaller batches if you experience issues.');
+      }
+
+      showSection('status');
+      document.getElementById('progress-bar').style.width = '0%';
+      setStatusText('Initializing OCR engine…', 'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.');
+
+      try {
+        const outputName = currentMode === 'pdf'
+          ? files[0].name.replace(/\.pdf$/i, '') + '-ocr.pdf'
+          : 'ocr-output.pdf';
+
+        const pdfBytes = currentMode === 'images'
+          ? await runImageMode(files, updateProgress)
+          : await runPdfMode(files[0], updateProgress);
+
+        triggerDownload(pdfBytes, outputName);
+
+      } catch (err) {
+        console.error('Conversion error:', err);
+        showSection('upload');
+        const msg = err.message || 'Unknown error. Check the browser console.';
+        showError(
+          msg.toLowerCase().includes('memory')
+            ? 'Out of memory — try fewer pages or smaller images.'
+            : 'Error: ' + msg
+        );
+      }
+    }
+  </script>
+</body>
+</html>
