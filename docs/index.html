@@ -355,6 +355,10 @@
     let currentMode = 'images';
     let lastDownloadUrl = null;
 
+    // Output page size: 8.5" × 11" at 72 pts/inch
+    const PAGE_W = 612;
+    const PAGE_H = 792;
+
     // ─── UI helpers ──────────────────────────────────────────────────────────
     function showSection(name) {
       ['upload', 'status', 'done'].forEach(id => {
@@ -494,13 +498,13 @@
     }
 
     // ─── Invisible text layer ─────────────────────────────────────────────────
-    async function addInvisibleTextLayer(page, words, imgWidth, imgHeight) {
+    async function addInvisibleTextLayer(page, words, imgWidth, imgHeight, drawX, drawY, drawW, drawH) {
       // Use only pdf-lib's public drawText API with opacity:0 (invisible but searchable).
       // Text extraction by PDF readers works on the content stream regardless of opacity.
       const font = await page.doc.embedFont(PDFLib.StandardFonts.Helvetica);
-      const { width: pageW, height: pageH } = page.getSize();
-      const scaleX = pageW / imgWidth;
-      const scaleY = pageH / imgHeight;
+      // drawX/Y/W/H describe where the image sits on the page (may have white margins)
+      const scaleX = drawW / imgWidth;
+      const scaleY = drawH / imgHeight;
 
       for (let i = 0; i < words.length; i++) {
         const word = words[i];
@@ -512,9 +516,9 @@
         if (x1 <= x0 || y1 <= y0) continue;
 
         // Tesseract: origin top-left, y increases downward
-        // PDF: origin bottom-left, y increases upward
-        const pdfX = x0 * scaleX;
-        const pdfY = pageH - (y1 * scaleY); // y1 = bottom of word box → PDF baseline
+        // PDF: origin bottom-left, y increases upward; drawY is bottom edge of image
+        const pdfX = drawX + x0 * scaleX;
+        const pdfY = drawY + drawH - (y1 * scaleY); // y1 = bottom of word box → PDF baseline
         const fontSize = Math.max(1, (y1 - y0) * scaleY);
 
         page.drawText(text, {
@@ -602,10 +606,15 @@
         for (let i = 0; i < pages.length; i++) {
           const { jpegBytes, words, imgW, imgH } = pages[i];
           setProgress(75 + (i / total) * 22, 'Building PDF — page ' + (i + 1) + '…');
-          const page = pdfDoc.addPage([imgW, imgH]);
+          const scale = Math.min(PAGE_W / imgW, PAGE_H / imgH);
+          const drawW = imgW * scale;
+          const drawH = imgH * scale;
+          const drawX = (PAGE_W - drawW) / 2;
+          const drawY = (PAGE_H - drawH) / 2;
+          const page = pdfDoc.addPage([PAGE_W, PAGE_H]);
           const pdfImg = await pdfDoc.embedJpg(jpegBytes);
-          page.drawImage(pdfImg, { x: 0, y: 0, width: imgW, height: imgH });
-          await addInvisibleTextLayer(page, words, imgW, imgH);
+          page.drawImage(pdfImg, { x: drawX, y: drawY, width: drawW, height: drawH });
+          await addInvisibleTextLayer(page, words, imgW, imgH, drawX, drawY, drawW, drawH);
         }
 
         setProgress(99, 'Saving PDF…');
@@ -678,17 +687,18 @@
           const jpegBytes = await canvasToJpegBytes(canvas, quality);
           releaseCanvas(canvas);
 
-          // Output page uses the original PDF dimensions (1x viewport = points)
-          const viewport1x = pdfjsPage.getViewport({ scale: 1.0 });
-          const pageW = viewport1x.width;
-          const pageH = viewport1x.height;
+          // Fit rendered page into 8.5"×11" portrait with white margins
+          const scale = Math.min(PAGE_W / imgW, PAGE_H / imgH);
+          const drawW = imgW * scale;
+          const drawH = imgH * scale;
+          const drawX = (PAGE_W - drawW) / 2;
+          const drawY = (PAGE_H - drawH) / 2;
 
-          const outPage = outDoc.addPage([pageW, pageH]);
+          const outPage = outDoc.addPage([PAGE_W, PAGE_H]);
           const pdfImg  = await outDoc.embedJpg(jpegBytes);
-          outPage.drawImage(pdfImg, { x: 0, y: 0, width: pageW, height: pageH });
+          outPage.drawImage(pdfImg, { x: drawX, y: drawY, width: drawW, height: drawH });
 
-          // imgW/imgH are 2x canvas dimensions; addInvisibleTextLayer handles the scale
-          await addInvisibleTextLayer(outPage, words, imgW, imgH);
+          await addInvisibleTextLayer(outPage, words, imgW, imgH, drawX, drawY, drawW, drawH);
           setProgress(pageBase + pageSlice, 'Page ' + pageNum + ' done');
         }
 
