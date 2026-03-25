@@ -358,7 +358,7 @@
     // ─── UI helpers ──────────────────────────────────────────────────────────
     function showSection(name) {
       ['upload', 'status', 'done'].forEach(id => {
-        document.getElementById(id + '-section').style.display = id === name ? '' : 'none';
+        document.getElementById(id + '-section').style.display = id === name ? 'block' : 'none';
       });
     }
 
