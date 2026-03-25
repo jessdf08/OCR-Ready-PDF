@@ -484,7 +484,7 @@
         canvas.toBlob(blob => {
           if (!blob) { reject(new Error('Image encoding failed. Try a different browser.')); return; }
           blob.arrayBuffer().then(resolve).catch(reject);
-        }, 'image/jpeg', quality || 0.85);
+        }, 'image/jpeg', quality || 1.0);
       });
     }
 
@@ -549,7 +549,7 @@
 
       try {
         const SAMPLE_SIZE = Math.min(5, total);
-        let quality = 0.85;
+        let quality = 1.0;
         const pages = [];
 
         // Helper: process one image through OCR and JPEG encode
@@ -575,14 +575,14 @@
 
         // Sample first SAMPLE_SIZE images at default quality to estimate average size
         for (let i = 0; i < SAMPLE_SIZE; i++) {
-          pages.push(await processImage(i, 0.85));
+          pages.push(await processImage(i, 1.0));
         }
 
         // Project total size; adjust quality before processing remaining images
         const sampleBytes = pages.reduce((s, p) => s + p.jpegBytes.byteLength, 0);
         const projectedTotal = (sampleBytes / SAMPLE_SIZE) * total;
         if (projectedTotal > TARGET_BYTES) {
-          quality = Math.max(0.3, 0.85 * (TARGET_BYTES / projectedTotal));
+          quality = Math.max(0.3, TARGET_BYTES / projectedTotal);
           // Re-encode sample pages at the adjusted quality
           for (let i = 0; i < pages.length; i++) {
             pages[i].jpegBytes = await canvasToJpegBytes(pages[i].canvas, quality);
@@ -669,7 +669,7 @@
           const words = (data.words || []).filter(w => w.text && w.text.trim());
 
           setProgress(pageBase + pageSlice * 0.9, 'Building PDF…');
-          const jpegBytes = await canvasToJpegBytes(canvas, 0.85);
+          const jpegBytes = await canvasToJpegBytes(canvas, 1.0);
           releaseCanvas(canvas);
 
           // Output page uses the original PDF dimensions (1x viewport = points)
