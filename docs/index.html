@@ -669,7 +669,7 @@
       hideError();
 
       const inputEl = document.getElementById(currentMode === 'images' ? 'input-images' : 'input-pdf');
-      const files = Array.from(inputEl.files);
+      const files = Array.from(inputEl.files).sort((a, b) => a.lastModified - b.lastModified);
 
       if (!files.length) { showError('No files selected.'); return; }
 
