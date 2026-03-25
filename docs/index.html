@@ -7,11 +7,6 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>OCR PDF Converter</title>
 
-  <!-- Load libraries synchronously (order matters — no async/defer) -->
-  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-
   <style>
     :root {
       --accent: #0071e3;
@@ -185,19 +180,26 @@
     /* ---- Progress bar ---- */
     .progress-track {
       width: 100%;
-      height: 6px;
+      height: 12px;
       background: var(--border);
-      border-radius: 3px;
-      margin: 14px 0 4px;
+      border-radius: 6px;
+      margin: 16px 0 6px;
       overflow: hidden;
     }
 
     .progress-bar {
       height: 100%;
       background: var(--accent);
-      border-radius: 3px;
+      border-radius: 6px;
       width: 0%;
-      transition: width 0.3s ease;
+      transition: width 0.25s ease;
+    }
+
+    .progress-pct {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--accent);
+      margin-top: 4px;
     }
 
     /* ---- Download button ---- */
@@ -321,6 +323,7 @@
       <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress-track">
         <div class="progress-bar" id="progress-bar"></div>
       </div>
+      <p class="progress-pct" id="progress-pct"></p>
       <p class="status-note" id="status-note">First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.</p>
     </div>
 
@@ -337,6 +340,11 @@
 
     <p class="footer-note">All processing happens in your browser &middot; No files are uploaded</p>
   </div>
+
+  <!-- Load libraries at end of body so HTML renders first (order still matters) -->
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 
   <script>
     // Configure PDF.js worker immediately after the scripts have loaded
@@ -376,13 +384,19 @@
       if (note !== undefined) document.getElementById('status-note').textContent = note;
     }
 
-    function updateProgress(completed, total, message) {
-      const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-      const bar = document.getElementById('progress-bar');
-      bar.style.width = pct + '%';
+    function setProgress(pct, message) {
+      pct = Math.max(0, Math.min(100, Math.round(pct)));
+      document.getElementById('progress-bar').style.width = pct + '%';
       document.getElementById('progress-track').setAttribute('aria-valuenow', pct);
-      document.getElementById('status-text').textContent = message;
-      document.getElementById('status-note').textContent = pct + '% — page ' + completed + ' of ' + total;
+      if (message !== undefined) document.getElementById('status-text').textContent = message;
+      document.getElementById('progress-pct').textContent = pct > 0 ? pct + '%' : '';
+    }
+
+    function updateProgress(completed, total, message) {
+      const pct = total > 0 ? (completed / total) * 100 : 0;
+      setProgress(pct, message);
+      document.getElementById('status-note').textContent =
+        total > 1 ? 'Page ' + completed + ' of ' + total : '';
     }
 
     // ─── Mode toggle ─────────────────────────────────────────────────────────
@@ -517,13 +531,30 @@
     // ─── Image mode pipeline ─────────────────────────────────────────────────
     async function runImageMode(files, onProgress) {
       const { PDFDocument } = PDFLib;
-      const worker = await Tesseract.createWorker('eng', 1);
-      const pdfDoc = await PDFDocument.create();
       const total = files.length;
+      // currentPage tracks which page we're OCR-ing so the logger can compute overall %
+      let currentPage = 0;
+
+      const worker = await Tesseract.createWorker('eng', 1, {
+        logger: m => {
+          if (m.status === 'recognizing text') {
+            // Each page's OCR occupies 80% of its slice; load/save each get 10%
+            const pageBase = (currentPage / total) * 100;
+            const pageSlice = (1 / total) * 100;
+            const pct = pageBase + pageSlice * (0.1 + m.progress * 0.8);
+            setProgress(pct, 'OCR — page ' + (currentPage + 1) + ' of ' + total + '…');
+          }
+        }
+      });
+      const pdfDoc = await PDFDocument.create();
 
       try {
         for (let i = 0; i < total; i++) {
-          onProgress(i, total, 'Loading image ' + (i + 1) + ' of ' + total + '…');
+          currentPage = i;
+          const pageBase = (i / total) * 100;
+          const pageSlice = (1 / total) * 100;
+          setProgress(pageBase, 'Loading image ' + (i + 1) + ' of ' + total + '…');
+          document.getElementById('status-note').textContent = total > 1 ? 'Page ' + (i + 1) + ' of ' + total : '';
 
           const img = await fileToImage(files[i]);
           const canvas = imageToCanvas(img, 2400);
@@ -532,10 +563,10 @@
           const imgW = canvas.width;
           const imgH = canvas.height;
 
-          onProgress(i, total, 'OCR — page ' + (i + 1) + ' of ' + total + '…');
           const { data } = await worker.recognize(canvas);
           const words = (data.words || []).filter(w => w.text && w.text.trim());
 
+          setProgress(pageBase + pageSlice * 0.9, 'Building PDF…');
           const jpegBytes = await canvasToJpegBytes(canvas, 0.85);
           releaseCanvas(canvas);
 
@@ -544,10 +575,10 @@
           page.drawImage(pdfImg, { x: 0, y: 0, width: imgW, height: imgH });
 
           await addInvisibleTextLayer(page, words, imgW, imgH);
-
-          onProgress(i + 1, total, 'Done page ' + (i + 1) + ' of ' + total);
+          setProgress(pageBase + pageSlice, 'Page ' + (i + 1) + ' done');
         }
 
+        setProgress(99, 'Saving PDF…');
         return await pdfDoc.save();
       } finally {
         await worker.terminate().catch(() => {});
@@ -558,6 +589,7 @@
     async function runPdfMode(file, onProgress) {
       const { PDFDocument } = PDFLib;
 
+      setProgress(2, 'Opening PDF…');
       const arrayBuffer = await file.arrayBuffer();
       let pdfjsDoc;
       try {
@@ -567,12 +599,28 @@
       }
 
       const numPages = pdfjsDoc.numPages;
-      const worker = await Tesseract.createWorker('eng', 1);
+      let currentPage = 0;
+
+      const worker = await Tesseract.createWorker('eng', 1, {
+        logger: m => {
+          if (m.status === 'recognizing text') {
+            const pageBase = (currentPage / numPages) * 100;
+            const pageSlice = (1 / numPages) * 100;
+            const pct = pageBase + pageSlice * (0.2 + m.progress * 0.7);
+            setProgress(pct, 'OCR — page ' + (currentPage + 1) + ' of ' + numPages + '…');
+          }
+        }
+      });
       const outDoc = await PDFDocument.create();
 
       try {
         for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-          onProgress(pageNum - 1, numPages, 'Rendering page ' + pageNum + ' of ' + numPages + '…');
+          currentPage = pageNum - 1;
+          const pageBase = (currentPage / numPages) * 100;
+          const pageSlice = (1 / numPages) * 100;
+
+          setProgress(pageBase, 'Rendering page ' + pageNum + ' of ' + numPages + '…');
+          document.getElementById('status-note').textContent = numPages > 1 ? 'Page ' + pageNum + ' of ' + numPages : '';
 
           const pdfjsPage = await pdfjsDoc.getPage(pageNum);
 
@@ -586,10 +634,11 @@
           const imgW = canvas.width;
           const imgH = canvas.height;
 
-          onProgress(pageNum - 1, numPages, 'OCR — page ' + pageNum + ' of ' + numPages + '…');
+          setProgress(pageBase + pageSlice * 0.2, 'OCR — page ' + pageNum + ' of ' + numPages + '…');
           const { data } = await worker.recognize(canvas);
           const words = (data.words || []).filter(w => w.text && w.text.trim());
 
+          setProgress(pageBase + pageSlice * 0.9, 'Building PDF…');
           const jpegBytes = await canvasToJpegBytes(canvas, 0.85);
           releaseCanvas(canvas);
 
@@ -604,10 +653,10 @@
 
           // imgW/imgH are 2x canvas dimensions; addInvisibleTextLayer handles the scale
           await addInvisibleTextLayer(outPage, words, imgW, imgH);
-
-          onProgress(pageNum, numPages, 'Done page ' + pageNum + ' of ' + numPages);
+          setProgress(pageBase + pageSlice, 'Page ' + pageNum + ' done');
         }
 
+        setProgress(99, 'Saving PDF…');
         return await outDoc.save();
       } finally {
         await worker.terminate().catch(() => {});
@@ -637,8 +686,8 @@
       }
 
       showSection('status');
-      document.getElementById('progress-bar').style.width = '0%';
-      setStatusText('Initializing OCR engine…', 'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.');
+      setProgress(0, 'Initializing OCR engine…');
+      document.getElementById('status-note').textContent = 'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.';
 
       try {
         const outputName = currentMode === 'pdf'
@@ -646,8 +695,8 @@
           : 'ocr-output.pdf';
 
         const pdfBytes = currentMode === 'images'
-          ? await runImageMode(files, updateProgress)
-          : await runPdfMode(files[0], updateProgress);
+          ? await runImageMode(files)
+          : await runPdfMode(files[0]);
 
         triggerDownload(pdfBytes, outputName);
 
