@@ -548,9 +548,12 @@
       });
 
       try {
-        // Pass 1: load every image, run OCR, encode at default quality, keep canvas
+        const SAMPLE_SIZE = Math.min(5, total);
+        let quality = 0.85;
         const pages = [];
-        for (let i = 0; i < total; i++) {
+
+        // Helper: process one image through OCR and JPEG encode
+        async function processImage(i, q) {
           currentPage = i;
           const pageBase = (i / total) * 70;
           const pageSlice = (1 / total) * 70;
@@ -565,23 +568,34 @@
           const words = (data.words || []).filter(w => w.text && w.text.trim());
 
           setProgress(pageBase + pageSlice * 0.9, 'Encoding image ' + (i + 1) + '…');
-          const jpegBytes = await canvasToJpegBytes(canvas, 0.85);
-          pages.push({ canvas, jpegBytes, words, imgW: canvas.width, imgH: canvas.height });
+          const jpegBytes = await canvasToJpegBytes(canvas, q);
           setProgress(pageBase + pageSlice, 'Page ' + (i + 1) + ' done');
+          return { canvas, jpegBytes, words, imgW: canvas.width, imgH: canvas.height };
         }
 
-        // Check total JPEG size; if over budget, re-encode at a reduced quality
-        const totalJpeg = pages.reduce((s, p) => s + p.jpegBytes.byteLength, 0);
-        if (totalJpeg > TARGET_BYTES) {
-          const quality = Math.max(0.3, 0.85 * (TARGET_BYTES / totalJpeg));
-          setProgress(72, 'Adjusting compression…');
+        // Sample first SAMPLE_SIZE images at default quality to estimate average size
+        for (let i = 0; i < SAMPLE_SIZE; i++) {
+          pages.push(await processImage(i, 0.85));
+        }
+
+        // Project total size; adjust quality before processing remaining images
+        const sampleBytes = pages.reduce((s, p) => s + p.jpegBytes.byteLength, 0);
+        const projectedTotal = (sampleBytes / SAMPLE_SIZE) * total;
+        if (projectedTotal > TARGET_BYTES) {
+          quality = Math.max(0.3, 0.85 * (TARGET_BYTES / projectedTotal));
+          // Re-encode sample pages at the adjusted quality
           for (let i = 0; i < pages.length; i++) {
             pages[i].jpegBytes = await canvasToJpegBytes(pages[i].canvas, quality);
           }
         }
 
-        // Release canvases — no longer needed
+        // Release sample canvases, then process remaining images at final quality
         pages.forEach(p => releaseCanvas(p.canvas));
+        for (let i = SAMPLE_SIZE; i < total; i++) {
+          const page = await processImage(i, quality);
+          releaseCanvas(page.canvas);
+          pages.push(page);
+        }
 
         // Pass 2: build PDF
         const pdfDoc = await PDFDocument.create();
