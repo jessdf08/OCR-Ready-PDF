@@ -617,6 +617,7 @@
 
     // ─── PDF mode pipeline ────────────────────────────────────────────────────
     async function runPdfMode(file, onProgress) {
+      const TARGET_BYTES = 90 * 1024 * 1024;
       const { PDFDocument } = PDFLib;
 
       setProgress(2, 'Opening PDF…');
@@ -630,6 +631,11 @@
 
       const numPages = pdfjsDoc.numPages;
       let currentPage = 0;
+
+      // Use input file size as a proxy to decide quality upfront
+      const quality = file.size > TARGET_BYTES
+        ? Math.max(0.3, TARGET_BYTES / file.size)
+        : 1.0;
 
       const worker = await Tesseract.createWorker('eng', 1, {
         logger: m => {
@@ -669,7 +675,7 @@
           const words = (data.words || []).filter(w => w.text && w.text.trim());
 
           setProgress(pageBase + pageSlice * 0.9, 'Building PDF…');
-          const jpegBytes = await canvasToJpegBytes(canvas, 1.0);
+          const jpegBytes = await canvasToJpegBytes(canvas, quality);
           releaseCanvas(canvas);
 
           // Output page uses the original PDF dimensions (1x viewport = points)
