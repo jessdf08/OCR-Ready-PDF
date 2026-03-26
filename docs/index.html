@@ -566,13 +566,19 @@
 
     <!-- Done: download -->
     <div id="done-section" style="display:none">
+      <div class="course-clear-title">COURSE<br>CLEAR!</div>
+      <canvas id="complete-canvas" width="300" height="200"></canvas>
+      <div class="course-stats">
+        <span>PAGES: <span id="done-pages">0</span></span>
+        <span>CONF: <span id="done-conf">&#8212;</span></span>
+      </div>
       <a class="btn-download" id="download-link" href="#">
-        &#8681; Download Searchable PDF
+        &#9733; Download Searchable PDF
       </a>
-      <p class="status-note" style="margin-bottom:16px">
-        On iPhone: tap above, then use the share sheet to save to Files.
+      <p class="status-note" style="margin-bottom:16px; font-family: 'Press Start 2P', monospace; font-size: 8px; line-height: 1.8; color: #fcbcb0;">
+        On iPhone: tap above, then share sheet &#8594; save to Files.
       </p>
-      <button class="btn-secondary" onclick="resetApp()">Convert another file</button>
+      <button class="btn-secondary" onclick="resetApp()">&#9654; PLAY AGAIN</button>
     </div>
 
     <p class="footer-note" id="app-footer">All processing happens in your browser &middot; No files are uploaded</p>
@@ -651,6 +657,8 @@
       if (pctText) pctText.textContent = pct + '%';
       const sub = document.getElementById('ring-sublabel');
       if (sub && message) sub.textContent = message.length > 22 ? message.slice(0, 22) + '…' : message;
+      // Update Mario puzzle
+      updatePuzzleCanvas(pct);
     }
 
     // ─── Neural lattice animation ─────────────────────────────────────────────
