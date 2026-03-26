@@ -176,9 +176,6 @@
     .dance-stage {
       position: relative;
       margin: 8px 0 4px;
-      cursor: pointer;
-      -webkit-tap-highlight-color: transparent;
-      user-select: none;
     }
 
     .dance-track {
@@ -186,7 +183,7 @@
       background: var(--border);
       border-radius: 3px;
       overflow: hidden;
-      margin-top: 82px;
+      margin-top: 56px;
     }
 
     .dance-fill {
@@ -205,74 +202,22 @@
       transition: left 0.25s ease;
     }
 
-    #dancer-svg line { stroke: var(--accent); stroke-width: 3; stroke-linecap: round; fill: none; }
-    #dancer-svg circle { fill: var(--accent); stroke: none; }
-
-    .dance-hint {
-      font-size: 12px;
-      color: var(--muted);
-      margin: 3px 0 0;
+    #bullet-bill {
+      display: block;
+      image-rendering: pixelated;
+      animation: bb-bounce 0.22s ease-in-out infinite alternate;
     }
 
-    /* ── Dance 1: Moonwalk ── */
-    #dancer-svg.moonwalk               { animation: mw-body 0.5s ease-in-out infinite alternate; }
-    #dancer-svg.moonwalk #d-leg-l      { animation: mw-leg-a 0.5s ease-in-out infinite alternate; }
-    #dancer-svg.moonwalk #d-leg-r      { animation: mw-leg-b 0.5s ease-in-out infinite alternate; }
-    #dancer-svg.moonwalk #d-arm-l      { animation: mw-arm-b 0.5s ease-in-out infinite alternate; }
-    #dancer-svg.moonwalk #d-arm-r      { animation: mw-arm-a 0.5s ease-in-out infinite alternate; }
-    @keyframes mw-body  { from { transform: rotate(-7deg); }   to { transform: rotate(-2deg); } }
-    @keyframes mw-leg-a { from { transform: rotate(22deg); }   to { transform: rotate(-22deg); } }
-    @keyframes mw-leg-b { from { transform: rotate(-22deg); }  to { transform: rotate(22deg); } }
-    @keyframes mw-arm-a { from { transform: rotate(20deg); }   to { transform: rotate(-20deg); } }
-    @keyframes mw-arm-b { from { transform: rotate(-20deg); }  to { transform: rotate(20deg); } }
+    #bb-teeth { animation: bb-chomp 0.22s steps(1, end) infinite; }
 
-    /* ── Dance 2: Floss ── */
-    #dancer-svg.floss               { animation: fl-body  0.65s ease-in-out infinite; }
-    #dancer-svg.floss #d-arm-l      { animation: fl-arm-l 0.65s ease-in-out infinite; }
-    #dancer-svg.floss #d-arm-r      { animation: fl-arm-r 0.65s ease-in-out infinite; }
-    #dancer-svg.floss #d-leg-l      { animation: fl-leg-l 0.65s ease-in-out infinite; }
-    #dancer-svg.floss #d-leg-r      { animation: fl-leg-r 0.65s ease-in-out infinite; }
-    @keyframes fl-body  { 0%,100% { transform: rotate(-10deg); } 50% { transform: rotate(10deg); } }
-    @keyframes fl-arm-l { 0%,100% { transform: rotate(-70deg); } 50% { transform: rotate(70deg); } }
-    @keyframes fl-arm-r { 0%,100% { transform: rotate(70deg);  } 50% { transform: rotate(-70deg); } }
-    @keyframes fl-leg-l { 0%,100% { transform: rotate(-12deg); } 50% { transform: rotate(12deg); } }
-    @keyframes fl-leg-r { 0%,100% { transform: rotate(12deg);  } 50% { transform: rotate(-12deg); } }
-
-    /* ── Dance 3: Disco ── */
-    #dancer-svg.disco               { animation: dc-body  0.85s ease-in-out infinite; }
-    #dancer-svg.disco #d-arm-r      { animation: dc-arm-r 0.85s ease-in-out infinite; }
-    #dancer-svg.disco #d-arm-l      { animation: dc-arm-l 0.85s ease-in-out infinite; }
-    #dancer-svg.disco #d-leg-r      { animation: dc-leg-r 0.85s ease-in-out infinite; }
-    #dancer-svg.disco #d-leg-l      { animation: dc-leg-l 0.85s ease-in-out infinite; }
-    @keyframes dc-body  { 0%,100% { transform: rotate(-6deg);   } 50% { transform: rotate(6deg); } }
-    @keyframes dc-arm-r { 0%,100% { transform: rotate(-120deg); } 50% { transform: rotate(25deg); } }
-    @keyframes dc-arm-l { 0%,100% { transform: rotate(25deg);   } 50% { transform: rotate(-120deg); } }
-    @keyframes dc-leg-r { 0%,100% { transform: rotate(-8deg);   } 50% { transform: rotate(8deg); } }
-    @keyframes dc-leg-l { 0%,100% { transform: rotate(8deg);    } 50% { transform: rotate(-8deg); } }
-
-    /* ── Dance 4: Robot ── */
-    #dancer-svg.robot               { animation: rb-body  0.6s steps(3,end) infinite; }
-    #dancer-svg.robot #d-arm-l      { animation: rb-arm-l 0.6s steps(3,end) infinite; }
-    #dancer-svg.robot #d-arm-r      { animation: rb-arm-r 0.6s steps(3,end) infinite; }
-    #dancer-svg.robot #d-leg-l      { animation: rb-leg-l 0.6s steps(3,end) infinite; }
-    #dancer-svg.robot #d-leg-r      { animation: rb-leg-r 0.6s steps(3,end) infinite; }
-    @keyframes rb-body  { 0% { transform: rotate(0deg);   } 33% { transform: rotate(5deg);   } 66% { transform: rotate(-5deg); } }
-    @keyframes rb-arm-l { 0% { transform: rotate(0deg);   } 33% { transform: rotate(-80deg); } 66% { transform: rotate(40deg); } }
-    @keyframes rb-arm-r { 0% { transform: rotate(0deg);   } 33% { transform: rotate(80deg);  } 66% { transform: rotate(-40deg); } }
-    @keyframes rb-leg-l { 0% { transform: rotate(0deg);   } 33% { transform: rotate(-25deg); } 66% { transform: rotate(25deg); } }
-    @keyframes rb-leg-r { 0% { transform: rotate(0deg);   } 33% { transform: rotate(25deg);  } 66% { transform: rotate(-25deg); } }
-
-    /* ── Dance 5: Running Man ── */
-    #dancer-svg.running               { animation: rn-body  0.38s ease-in-out infinite alternate; }
-    #dancer-svg.running #d-leg-l      { animation: rn-leg-l 0.38s ease-in-out infinite alternate; }
-    #dancer-svg.running #d-leg-r      { animation: rn-leg-r 0.38s ease-in-out infinite alternate; }
-    #dancer-svg.running #d-arm-l      { animation: rn-arm-l 0.38s ease-in-out infinite alternate; }
-    #dancer-svg.running #d-arm-r      { animation: rn-arm-r 0.38s ease-in-out infinite alternate; }
-    @keyframes rn-body  { from { transform: translateY(0);    } to { transform: translateY(-5px); } }
-    @keyframes rn-leg-l { from { transform: rotate(-55deg);   } to { transform: rotate(65deg); } }
-    @keyframes rn-leg-r { from { transform: rotate(65deg);    } to { transform: rotate(-55deg); } }
-    @keyframes rn-arm-l { from { transform: rotate(55deg);    } to { transform: rotate(-40deg); } }
-    @keyframes rn-arm-r { from { transform: rotate(-40deg);   } to { transform: rotate(55deg); } }
+    @keyframes bb-bounce {
+      from { transform: translateY(0); }
+      to   { transform: translateY(-3px); }
+    }
+    @keyframes bb-chomp {
+      0%, 49%   { opacity: 1; }
+      50%, 100% { opacity: 0; }
+    }
 
     /* ---- Download button ---- */
     .btn-download {
@@ -390,22 +335,14 @@
 
     <!-- Processing status -->
     <div id="status-section">
-      <div class="dance-stage" id="dance-stage" title="Tap to change dance move">
+      <div class="dance-stage" id="dance-stage">
         <div class="dancer-wrap" id="dancer-wrap">
-          <svg id="dancer-svg" class="moonwalk" viewBox="-35 -90 70 90" width="70" height="90" overflow="visible" aria-hidden="true">
-            <circle id="d-head" cx="0" cy="-68" r="8"/>
-            <line   id="d-body" x1="0" y1="-60" x2="0" y2="-28"/>
-            <g id="d-arm-l" style="transform-origin:0px -50px"><line x1="0" y1="-50" x2="-16" y2="-34"/></g>
-            <g id="d-arm-r" style="transform-origin:0px -50px"><line x1="0" y1="-50" x2="16"  y2="-34"/></g>
-            <g id="d-leg-l" style="transform-origin:0px -28px"><line x1="0" y1="-28" x2="-13" y2="0"/></g>
-            <g id="d-leg-r" style="transform-origin:0px -28px"><line x1="0" y1="-28" x2="13"  y2="0"/></g>
-          </svg>
+          <svg id="bullet-bill" viewBox="0 0 64 48" width="64" height="48" overflow="visible" aria-hidden="true"></svg>
         </div>
         <div class="dance-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="dance-track">
           <div class="dance-fill" id="dance-fill"></div>
         </div>
       </div>
-      <p class="dance-hint" id="dance-hint">Moonwalk &nbsp;·&nbsp; tap to change</p>
       <p class="status-text" id="status-text">Initializing…</p>
       <p class="progress-pct" id="progress-pct"></p>
       <p class="status-note" id="status-note">First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.</p>
@@ -481,36 +418,38 @@
       document.getElementById('progress-pct').textContent = pct > 0 ? pct + '%' : '';
     }
 
-    // ─── Dancer ──────────────────────────────────────────────────────────────
-    const DANCES = [
-      { cls: 'moonwalk', name: 'Moonwalk' },
-      { cls: 'floss',    name: 'Floss' },
-      { cls: 'disco',    name: 'Disco' },
-      { cls: 'robot',    name: 'Robot' },
-      { cls: 'running',  name: 'Running Man' },
-    ];
-    let danceIndex = 0;
-    let danceTimer = null;
-
-    function setDance(i) {
-      danceIndex = i;
-      document.getElementById('dancer-svg').className.baseVal = DANCES[i].cls;
-      document.getElementById('dance-hint').textContent = DANCES[i].name + ' \u00b7 tap to change';
-    }
-
-    function startDanceCycle() {
-      setDance(0);
-      danceTimer = setInterval(() => setDance((danceIndex + 1) % DANCES.length), 3000);
-      document.getElementById('dance-stage').addEventListener('click', onDanceTap);
-    }
-
-    function stopDanceCycle() {
-      clearInterval(danceTimer);
-      danceTimer = null;
-      document.getElementById('dance-stage').removeEventListener('click', onDanceTap);
-    }
-
-    function onDanceTap() { setDance((danceIndex + 1) % DANCES.length); }
+    // ─── Bullet Bill pixel art ───────────────────────────────────────────────
+    (function () {
+      // 16 × 12 pixel grid, 4 CSS px per pixel = 64 × 48
+      // X=black  g=gray  s=silver  w=white  r=red  d=dark
+      const rows = [
+        '....XXXXXXXX....',  // 0  top arc
+        '..XXXXXXXXXXXX..',  // 1
+        '.XXXXXXXXXXXXXX.',  // 2
+        'XXXXXXXXXXXXXXXX',  // 3
+        'XgsXXXXXXXXwrXXX',  // 4  eye white + red brow
+        'XgsXXXXXXXXrwdXX',  // 5  eye: red / white / dark pupil
+        'XXXXXXXXXXXXXXXX',  // 6
+        'XgsXXXXXXXrrrrXX',  // 7  red mouth/gums
+        'XXXXXXXXXXwXwXXX',  // 8  teeth (animated — put in #bb-teeth)
+        'XXXXXXXXXXXXXXXX',  // 9
+        '..XXXXXXXXXXXX..',  // 10
+        '....XXXXXXXX....',  // 11 bottom arc
+      ];
+      const c = { X: '#111', g: '#555', s: '#bbb', w: '#eee', r: '#c00', d: '#222' };
+      const px = 4;
+      const svg = document.getElementById('bullet-bill');
+      if (!svg) return;
+      let body = '', teeth = '';
+      rows.forEach((row, y) => {
+        [...row].forEach((ch, x) => {
+          if (!c[ch]) return;
+          const rect = `<rect x="${x * px}" y="${y * px}" width="${px}" height="${px}" fill="${c[ch]}"/>`;
+          if (y === 8) teeth += rect; else body += rect;
+        });
+      });
+      svg.innerHTML = body + `<g id="bb-teeth">${teeth}</g>`;
+    }());
 
     function updateProgress(completed, total, message) {
       const pct = total > 0 ? (completed / total) * 100 : 0;
@@ -555,7 +494,6 @@
 
     // ─── Download / reset ────────────────────────────────────────────────────
     function triggerDownload(pdfBytes, filename) {
-      stopDanceCycle();
       if (lastDownloadUrl) URL.revokeObjectURL(lastDownloadUrl);
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       lastDownloadUrl = URL.createObjectURL(blob);
@@ -849,7 +787,6 @@
       }
 
       showSection('status');
-      startDanceCycle();
       setProgress(0, 'Initializing OCR engine…');
       document.getElementById('status-note').textContent = 'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.';
 
