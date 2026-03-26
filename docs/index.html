@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <title>OCR PDF Converter</title>
 
   <style>
@@ -183,12 +185,6 @@
     .btn-primary:not(:disabled):active { transform: scale(0.97); }
 
     /* ---- Status section ---- */
-    #status-section {
-      display: none;
-      text-align: center;
-      padding: 12px 0 4px;
-    }
-
     .status-text {
       font-size: 15px;
       font-weight: 500;
@@ -231,23 +227,131 @@
       animation: shimmer 2s linear infinite;
     }
 
-    /* ---- Snake game ---- */
-    .snake-wrap { text-align: center; }
-    #snake-canvas {
+    /* ─── Bento dashboard (status screen) ─── */
+    #status-section {
+      display: none;
+      margin: -28px -24px;
+    }
+    .bento-grid {
+      --d-bg: #0d1117;
+      --d-tile: #161b22;
+      --d-border: #30363d;
+      --d-text: #e6edf3;
+      --d-muted: #7d8590;
+      --d-blue: #58a6ff;
+      --d-lime: #7ee787;
+      --d-orange: #ff9f0a;
+      background: var(--d-bg);
+      border-radius: var(--radius);
+      padding: 16px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+    }
+    .bento-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .bento-title-text {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--d-text);
+      text-transform: uppercase;
+    }
+    .bento-subtitle-text {
+      font-size: 9px;
+      color: var(--d-muted);
+      margin-top: 3px;
+      letter-spacing: 0.03em;
+    }
+    .bento-stats { display: flex; flex-direction: column; gap: 5px; align-items: flex-end; }
+    .stat-badge {
+      background: var(--d-tile);
+      border: 1px solid var(--d-border);
+      border-radius: 5px;
+      padding: 4px 8px;
+      font-size: 9px;
+      color: var(--d-muted);
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+      text-transform: uppercase;
+    }
+    .stat-badge .badge-val { color: var(--d-blue); font-weight: 600; }
+    .conf-badge .badge-val { color: var(--d-lime); }
+    .bento-middle { display: flex; gap: 10px; align-items: flex-start; }
+    .bento-left { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+    .progress-ring { width: 150px; height: 150px; margin: 0 auto; display: block; }
+    .ring-bg { fill: none; stroke: var(--d-border); stroke-width: 7; }
+    .ring-fill {
+      fill: none;
+      stroke: url(#ring-grad);
+      stroke-width: 7;
+      stroke-linecap: round;
+      transform-origin: 100px 100px;
+      transform: rotate(-90deg);
+      stroke-dasharray: 502.655;
+      stroke-dashoffset: 502.655;
+      transition: stroke-dashoffset 0.4s ease;
+    }
+    .ring-pct-text {
+      font-size: 28px;
+      font-weight: 700;
+      fill: var(--d-text);
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .ring-sublabel { font-size: 8px; fill: var(--d-muted); letter-spacing: 0.07em; }
+    .log-panel {
+      background: var(--d-tile);
+      border: 1px solid var(--d-border);
+      border-radius: 7px;
+      padding: 7px 9px;
+      height: 80px;
+      overflow-y: auto;
+      scrollbar-width: none;
+      font-size: 9px;
+      line-height: 1.75;
+      color: var(--d-muted);
+    }
+    .log-panel::-webkit-scrollbar { display: none; }
+    .log-entry { display: block; }
+    .log-ts { color: var(--d-blue); }
+    .log-ok { color: var(--d-lime); }
+    .log-active { color: var(--d-orange); }
+    .bento-right {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      width: 95px;
+      flex-shrink: 0;
+    }
+    #preview-canvas {
+      width: 100%;
+      border-radius: 4px;
+      border: 1px solid var(--d-border);
+      background: #0a0a0f;
       display: block;
-      margin: 0 auto;
-      border: none;
-      border-radius: 12px;
-      box-shadow: 0 0 0 3px #306230, 0 4px 24px rgba(48,98,48,.40);
-      image-rendering: pixelated;
     }
-    .snake-score {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--muted);
-      margin: 8px 0 12px;
-      font-variant-numeric: tabular-nums;
+    .preview-track { width: 100%; height: 3px; background: var(--d-border); border-radius: 2px; overflow: hidden; }
+    .preview-fill { height: 100%; background: var(--d-blue); border-radius: 2px; width: 0%; transition: width 0.3s ease; }
+    .preview-label { font-size: 9px; color: var(--d-muted); text-align: center; }
+    .bento-viz {
+      background: var(--d-tile);
+      border: 1px solid var(--d-border);
+      border-radius: 8px;
+      padding: 10px 10px 8px;
     }
+    .viz-title { font-size: 8.5px; letter-spacing: 0.07em; color: var(--d-text); text-transform: uppercase; margin-bottom: 2px; }
+    .viz-sub { font-size: 8px; color: var(--d-muted); margin-bottom: 8px; }
+    #neural-canvas { display: block; width: 100%; height: 140px; border-radius: 4px; background: var(--d-bg); }
+    .bento-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 2px; }
+    .wasm-badge { font-size: 9px; letter-spacing: 0.06em; color: var(--d-muted); text-transform: uppercase; }
+    #status-section .status-note { font-size: 9px; color: var(--d-muted); text-align: right; margin: 0; }
+    .bento-compat { display: none; }
 
     /* ---- Download button ---- */
     .btn-download {
@@ -322,8 +426,8 @@
 </head>
 <body>
   <div class="card">
-    <h1>OCR PDF Converter</h1>
-    <p class="subtitle">Turn photos or scanned PDFs into searchable PDFs — right in your browser.</p>
+    <h1 id="app-heading">OCR PDF Converter</h1>
+    <p class="subtitle" id="app-subtitle">Turn photos or scanned PDFs into searchable PDFs — right in your browser.</p>
 
     <!-- Error banner -->
     <div class="error-box" id="error-box"></div>
@@ -373,16 +477,68 @@
 
     <!-- Processing status -->
     <div id="status-section">
-      <div class="prog-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="prog-track">
-        <div class="prog-fill" id="prog-fill"></div>
+      <div class="bento-grid">
+
+        <!-- Row 1: Header + stats -->
+        <div class="bento-header">
+          <div>
+            <div class="bento-title-text">OCR PDF CONVERTER</div>
+            <div class="bento-subtitle-text">locally processed in your browser</div>
+          </div>
+          <div class="bento-stats">
+            <div class="stat-badge">TOTAL PROCESSED: <span class="badge-val" id="stat-pages-val">0</span> PAGES</div>
+            <div class="stat-badge conf-badge">CONFIDENCE: <span class="badge-val" id="stat-conf-val">—</span></div>
+          </div>
+        </div>
+
+        <!-- Row 2: Ring + log | page preview -->
+        <div class="bento-middle">
+          <div class="bento-left">
+            <svg class="progress-ring" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="ring-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#58a6ff"/>
+                  <stop offset="100%" stop-color="#7ee787"/>
+                </linearGradient>
+              </defs>
+              <circle class="ring-bg" cx="100" cy="100" r="80"/>
+              <circle class="ring-fill" id="ring-fill" cx="100" cy="100" r="80"/>
+              <text class="ring-pct-text" id="ring-pct-text" x="100" y="96" text-anchor="middle" dominant-baseline="middle">0%</text>
+              <text class="ring-sublabel" id="ring-sublabel" x="100" y="118" text-anchor="middle">INITIALIZING</text>
+            </svg>
+            <div class="log-panel" id="log-panel"></div>
+          </div>
+          <div class="bento-right">
+            <canvas id="preview-canvas" width="110" height="128"></canvas>
+            <div class="preview-track">
+              <div class="preview-fill" id="preview-fill"></div>
+            </div>
+            <p class="preview-label" id="preview-label">—</p>
+          </div>
+        </div>
+
+        <!-- Row 3: Neural lattice visualization -->
+        <div class="bento-viz">
+          <div class="viz-title">REAL-TIME NEURAL CHARACTER IDENTIFICATION: <span id="viz-page">PAGE 1</span></div>
+          <div class="viz-sub">Lattice Activation and Data Flow</div>
+          <canvas id="neural-canvas" width="400" height="140"></canvas>
+        </div>
+
+        <!-- Row 4: Footer -->
+        <div class="bento-footer">
+          <div class="wasm-badge">LOCAL PROCESSING | (WASM) ⓘ</div>
+          <p class="status-note" id="status-note"></p>
+        </div>
       </div>
-      <div class="snake-wrap">
-        <canvas id="snake-canvas" width="200" height="200"></canvas>
-        <p class="snake-score">Score: <span id="snake-score">0</span></p>
+
+      <!-- Hidden compat elements (pipeline writes to these) -->
+      <div class="bento-compat" aria-hidden="true">
+        <div id="prog-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div id="prog-fill"></div>
+        </div>
+        <p id="status-text"></p>
+        <p id="progress-pct"></p>
       </div>
-      <p class="status-text" id="status-text">Initializing…</p>
-      <p class="progress-pct" id="progress-pct"></p>
-      <p class="status-note" id="status-note">First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.</p>
     </div>
 
     <!-- Done: download -->
@@ -396,7 +552,7 @@
       <button class="btn-secondary" onclick="resetApp()">Convert another file</button>
     </div>
 
-    <p class="footer-note">All processing happens in your browser &middot; No files are uploaded</p>
+    <p class="footer-note" id="app-footer">All processing happens in your browser &middot; No files are uploaded</p>
   </div>
 
   <!-- Load libraries at end of body so HTML renders first (order still matters) -->
@@ -421,6 +577,11 @@
     function showSection(name) {
       ['upload', 'status', 'done'].forEach(id => {
         document.getElementById(id + '-section').style.display = id === name ? 'block' : 'none';
+      });
+      const isStatus = name === 'status';
+      ['app-heading', 'app-subtitle', 'app-footer'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = isStatus ? 'none' : '';
       });
     }
 
@@ -448,151 +609,175 @@
 
     function setProgress(pct, message) {
       pct = Math.max(0, Math.min(100, Math.round(pct)));
-      document.getElementById('prog-fill').style.width = pct + '%';
-      document.getElementById('prog-track').setAttribute('aria-valuenow', pct);
-      if (message !== undefined) document.getElementById('status-text').textContent = message;
-      document.getElementById('progress-pct').textContent = pct > 0 ? pct + '%' : '';
+      // Update hidden compat elements
+      const fill = document.getElementById('prog-fill');
+      const track = document.getElementById('prog-track');
+      if (fill) fill.style.width = pct + '%';
+      if (track) track.setAttribute('aria-valuenow', pct);
+      if (message !== undefined) {
+        const st = document.getElementById('status-text');
+        if (st) st.textContent = message;
+      }
+      const pp = document.getElementById('progress-pct');
+      if (pp) pp.textContent = pct > 0 ? pct + '%' : '';
+      // Update bento ring
+      const circumference = 502.655;
+      const ringEl = document.getElementById('ring-fill');
+      if (ringEl) ringEl.style.strokeDashoffset = circumference * (1 - pct / 100);
+      const pctText = document.getElementById('ring-pct-text');
+      if (pctText) pctText.textContent = pct + '%';
+      const sub = document.getElementById('ring-sublabel');
+      if (sub && message) sub.textContent = message.length > 22 ? message.slice(0, 22) + '…' : message;
     }
 
-    // ─── Snake game ──────────────────────────────────────────────────────────
-    let snakeHandle = null;
+    // ─── Neural lattice animation ─────────────────────────────────────────────
+    let neuralHandle = null;
+    let totalPagesProcessed = 0;
+    let totalConfidenceSum = 0;
+    let confidenceCount = 0;
 
-    function initSnake() {
-      const canvas = document.getElementById('snake-canvas');
-      if (!canvas || snakeHandle) return;
-
-      const COLS = 20, ROWS = 20, CELL = 10;
-      const C_BG = '#9bbc0f', C_DARK = '#0f380f', C_MID = '#306230';
+    function initNeural() {
+      const canvas = document.getElementById('neural-canvas');
+      if (!canvas || neuralHandle) return;
       const ctx = canvas.getContext('2d');
+      // Match canvas pixel dimensions to its CSS size
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const CW = (rect.width || 400);
+      const CH = (rect.height || 140);
+      canvas.width = Math.round(CW * dpr);
+      canvas.height = Math.round(CH * dpr);
+      ctx.scale(dpr, dpr);
 
-      let snake, dir, queued, food, score, loopId, speed;
+      const N = 110;
+      const particles = Array.from({ length: N }, () => ({
+        x: (Math.random() - 0.5) * 260,
+        y: (Math.random() - 0.5) * 110,
+        z: (Math.random() - 0.5) * 260,
+        pulse: Math.random() * Math.PI * 2,
+        pulseSpeed: 0.012 + Math.random() * 0.022,
+        lime: Math.random() > 0.62,
+      }));
 
-      function respawn() {
-        snake  = [{ x: 12, y: 10 }, { x: 11, y: 10 }, { x: 10, y: 10 }];
-        dir    = { x: 1, y: 0 };
-        queued = { x: 1, y: 0 };
-        score  = 0;
-        speed  = 600;
-        document.getElementById('snake-score').textContent = score;
-        placeFood();
-        clearInterval(loopId);
-        loopId = setInterval(tick, speed);
-      }
+      let angle = 0;
+      let rafId;
 
-      function placeFood() {
-        let p;
-        do { p = { x: (Math.random() * COLS) | 0, y: (Math.random() * ROWS) | 0 }; }
-        while (snake.some(s => s.x === p.x && s.y === p.y));
-        food = p;
-      }
-
-      function tick() {
-        dir = queued;
-        const head = {
-          x: snake[0].x + dir.x,
-          y: snake[0].y + dir.y,
-        };
-        // Wall collision → game over
-        if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS) {
-          clearInterval(loopId);
-          showGameOver();
-          return;
-        }
-        // Self-collision → game over
-        if (snake.some(s => s.x === head.x && s.y === head.y)) {
-          clearInterval(loopId);
-          showGameOver();
-          return;
-        }
-        snake.unshift(head);
-        if (head.x === food.x && head.y === food.y) {
-          score++;
-          document.getElementById('snake-score').textContent = score;
-          placeFood();
-          if (score % 5 === 0) {
-            speed = Math.max(280, speed - 32);
-            clearInterval(loopId);
-            loopId = setInterval(tick, speed);
-          }
-        } else {
-          snake.pop();
-        }
-        draw();
+      function project(x, y, z) {
+        const cos = Math.cos(angle), sin = Math.sin(angle);
+        const rx = x * cos - z * sin;
+        const rz = x * sin + z * cos;
+        const fov = 340;
+        const s = fov / (fov + rz);
+        return { sx: CW / 2 + rx * s * 0.88, sy: CH / 2 + (y - rz * 0.32) * s * 0.72, s, rz };
       }
 
       function draw() {
-        ctx.fillStyle = C_BG;
-        ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL);
-        ctx.fillStyle = C_MID;
-        ctx.fillRect(food.x * CELL + 2, food.y * CELL + 2, CELL - 4, CELL - 4);
-        snake.forEach((s, i) => {
-          ctx.fillStyle = i === 0 ? C_DARK : C_MID;
-          ctx.fillRect(s.x * CELL + 1, s.y * CELL + 1, CELL - 2, CELL - 2);
+        ctx.clearRect(0, 0, CW, CH);
+
+        angle += 0.004;
+
+        const pts = particles.map((p, i) => {
+          p.pulse += p.pulseSpeed;
+          const b = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(p.pulse));
+          return { ...project(p.x, p.y, p.z), b, lime: p.lime, i };
         });
-      }
+        pts.sort((a, b2) => b2.rz - a.rz);
 
-      let gameOver = false;
-      function showGameOver() {
-        gameOver = true;
-        const W = COLS * CELL, H = ROWS * CELL;
-        ctx.fillStyle = C_DARK;
-        ctx.fillRect(0, 0, W, H);
-        ctx.fillStyle = C_BG;
-        ctx.font = 'bold 14px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('GAME OVER', W / 2, H / 2 - 14);
-        ctx.font = '10px monospace';
-        ctx.fillText('Score: ' + score, W / 2, H / 2);
-        ctx.fillText('Tap or swipe to play again', W / 2, H / 2 + 16);
-      }
-
-      function handlePlayAgain() {
-        if (!gameOver) return;
-        gameOver = false;
-        respawn();
-      }
-
-      function steer(dx, dy) {
-        if (dx !== 0 && dir.x !== 0) return;
-        if (dy !== 0 && dir.y !== 0) return;
-        queued = { x: dx, y: dy };
-      }
-
-      // Keyboard
-      const keyMap = {
-        ArrowUp: [0,-1], ArrowDown: [0,1], ArrowLeft: [-1,0], ArrowRight: [1,0],
-        w: [0,-1], s: [0,1], a: [-1,0], d: [1,0],
-      };
-      function onKey(e) {
-        if (gameOver) { handlePlayAgain(); return; }
-        if (keyMap[e.key]) { e.preventDefault(); steer(...keyMap[e.key]); }
-      }
-      document.addEventListener('keydown', onKey);
-
-      // Swipe on canvas
-      let t0 = null;
-      canvas.addEventListener('touchstart', e => { t0 = e.touches[0]; e.preventDefault(); }, { passive: false });
-      canvas.addEventListener('touchend', e => {
-        if (!t0) return;
-        const dx = e.changedTouches[0].clientX - t0.clientX;
-        const dy = e.changedTouches[0].clientY - t0.clientY;
-        t0 = null;
-        e.preventDefault();
-        if (gameOver) { handlePlayAgain(); return; }
-        Math.abs(dx) > Math.abs(dy) ? steer(dx > 0 ? 1 : -1, 0) : steer(0, dy > 0 ? 1 : -1);
-      }, { passive: false });
-
-      snakeHandle = {
-        stop() {
-          clearInterval(loopId);
-          document.removeEventListener('keydown', onKey);
+        // Connections
+        for (let i = 0; i < pts.length; i++) {
+          const pi = particles[pts[i].i];
+          for (let j = i + 1; j < pts.length; j++) {
+            const pj = particles[pts[j].i];
+            const dx = pi.x - pj.x, dy = pi.y - pj.y, dz = pi.z - pj.z;
+            const dist2 = dx * dx + dy * dy + dz * dz;
+            if (dist2 < 70 * 70) {
+              const alpha = (1 - Math.sqrt(dist2) / 70) * 0.16 * ((pts[i].b + pts[j].b) / 2);
+              ctx.strokeStyle = (pts[i].lime || pts[j].lime)
+                ? `rgba(126,231,135,${alpha})` : `rgba(88,166,255,${alpha})`;
+              ctx.lineWidth = 0.5;
+              ctx.beginPath();
+              ctx.moveTo(pts[i].sx, pts[i].sy);
+              ctx.lineTo(pts[j].sx, pts[j].sy);
+              ctx.stroke();
+            }
+          }
         }
-      };
-      respawn();
+
+        // Dots
+        for (const p of pts) {
+          const r = (0.7 + p.s * 1.4) * (0.6 + p.b * 0.7);
+          const col = p.lime
+            ? `rgba(126,231,135,${0.45 + p.b * 0.55})`
+            : `rgba(88,166,255,${0.35 + p.b * 0.65})`;
+          if (p.b > 0.76) {
+            const gr = ctx.createRadialGradient(p.sx, p.sy, 0, p.sx, p.sy, r * 5);
+            gr.addColorStop(0, p.lime ? 'rgba(126,231,135,0.22)' : 'rgba(88,166,255,0.18)');
+            gr.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = gr;
+            ctx.beginPath();
+            ctx.arc(p.sx, p.sy, r * 5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.fillStyle = col;
+          ctx.beginPath();
+          ctx.arc(p.sx, p.sy, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        rafId = requestAnimationFrame(draw);
+      }
+
+      draw();
+      neuralHandle = { stop() { cancelAnimationFrame(rafId); } };
     }
 
-    function stopSnake() {
-      if (snakeHandle) { snakeHandle.stop(); snakeHandle = null; }
+    function stopNeural() {
+      if (neuralHandle) { neuralHandle.stop(); neuralHandle = null; }
+    }
+
+    function addLog(message, type) {
+      const panel = document.getElementById('log-panel');
+      if (!panel) return;
+      const d = new Date();
+      const ts = d.toTimeString().slice(0, 8);
+      const entry = document.createElement('span');
+      entry.className = 'log-entry';
+      let badge, bClass;
+      if (type === 'ok')     { badge = ' [COMPLETE]'; bClass = 'log-ok'; }
+      else if (type === 'active') { badge = ' [ACTIVE]'; bClass = 'log-active'; }
+      else                   { badge = ' [SYNC]'; bClass = 'log-sync'; }
+      entry.innerHTML = `<span class="log-ts">[${ts}]</span> ${message}<span class="${bClass}">${badge}</span><br>`;
+      panel.appendChild(entry);
+      panel.scrollTop = panel.scrollHeight;
+    }
+
+    function setPagePreview(srcCanvas, pageNum, totalPages) {
+      const preview = document.getElementById('preview-canvas');
+      if (!preview) return;
+      const pCtx = preview.getContext('2d');
+      const PW = preview.width, PH = preview.height;
+      pCtx.fillStyle = '#0a0a0f';
+      pCtx.fillRect(0, 0, PW, PH);
+      const scale = Math.min(PW / srcCanvas.width, PH / srcCanvas.height) * 0.94;
+      const w = srcCanvas.width * scale, h = srcCanvas.height * scale;
+      pCtx.drawImage(srcCanvas, (PW - w) / 2, (PH - h) / 2, w, h);
+      const pct = totalPages > 0 ? (pageNum / totalPages) * 100 : 0;
+      const fillEl = document.getElementById('preview-fill');
+      if (fillEl) fillEl.style.width = pct + '%';
+      const lbl = document.getElementById('preview-label');
+      if (lbl) lbl.textContent = 'Page ' + pageNum + ' of ' + totalPages;
+      const vp = document.getElementById('viz-page');
+      if (vp) vp.textContent = 'PAGE ' + pageNum;
+    }
+
+    function updateStats(pagesDone, confidence) {
+      totalPagesProcessed = pagesDone;
+      if (confidence > 0) { totalConfidenceSum += confidence; confidenceCount++; }
+      const avg = confidenceCount > 0 ? Math.round(totalConfidenceSum / confidenceCount) : 0;
+      const pEl = document.getElementById('stat-pages-val');
+      const cEl = document.getElementById('stat-conf-val');
+      if (pEl) pEl.textContent = pagesDone;
+      if (cEl) cEl.textContent = confidenceCount > 0 ? avg + '%' : '—';
     }
 
     function updateProgress(completed, total, message) {
@@ -638,7 +823,7 @@
 
     // ─── Download / reset ────────────────────────────────────────────────────
     function triggerDownload(pdfBytes, filename) {
-      stopSnake();
+      stopNeural();
       if (lastDownloadUrl) URL.revokeObjectURL(lastDownloadUrl);
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       lastDownloadUrl = URL.createObjectURL(blob);
@@ -770,6 +955,10 @@
 
           const { data } = await worker.recognize(canvas);
           const words = (data.words || []).filter(w => w.text && w.text.trim());
+          const confidence = Math.round(data.confidence || 0);
+          setPagePreview(canvas, i + 1, total);
+          updateStats(i + 1, confidence);
+          addLog('PAGE ' + (i + 1) + ' CHARACTER EXTRACTION: ' + confidence + '% Confidence', confidence >= 80 ? 'ok' : 'active');
 
           setProgress(pageBase + pageSlice * 0.9, 'Encoding image ' + (i + 1) + '…');
           const jpegBytes = await canvasToJpegBytes(canvas, q);
@@ -882,6 +1071,10 @@
           setProgress(pageBase + pageSlice * 0.2, 'OCR — page ' + pageNum + ' of ' + numPages + '…');
           const { data } = await worker.recognize(canvas);
           const words = (data.words || []).filter(w => w.text && w.text.trim());
+          const confidence = Math.round(data.confidence || 0);
+          setPagePreview(canvas, pageNum, numPages);
+          updateStats(pageNum, confidence);
+          addLog('PAGE ' + pageNum + ' CHARACTER EXTRACTION: ' + confidence + '% Confidence', confidence >= 80 ? 'ok' : 'active');
 
           setProgress(pageBase + pageSlice * 0.9, 'Building PDF…');
           const jpegBytes = await canvasToJpegBytes(canvas, quality);
@@ -931,9 +1124,14 @@
         showWarn('Processing ' + files.length + ' images may be slow or use a lot of memory on mobile. Consider smaller batches if you experience issues.');
       }
 
+      // Reset stats for new run
+      totalPagesProcessed = 0;
+      totalConfidenceSum = 0;
+      confidenceCount = 0;
       showSection('status');
-      initSnake();
+      initNeural();
       setProgress(0, 'Initializing OCR engine…');
+      addLog('INITIALIZING OCR ENGINE', 'sync');
       document.getElementById('status-note').textContent = 'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.';
 
       try {
