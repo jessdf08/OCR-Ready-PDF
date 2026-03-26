@@ -172,21 +172,15 @@
       margin-top: 4px;
     }
 
-    /* ---- Dance stage ---- */
-    .dance-stage {
-      position: relative;
-      margin: 8px 0 4px;
-    }
-
-    .dance-track {
+    /* ---- Progress track ---- */
+    .prog-track {
       height: 6px;
       background: var(--border);
       border-radius: 3px;
       overflow: hidden;
-      margin-top: 56px;
+      margin-bottom: 12px;
     }
-
-    .dance-fill {
+    .prog-fill {
       height: 100%;
       background: var(--accent);
       border-radius: 3px;
@@ -194,30 +188,44 @@
       transition: width 0.25s ease;
     }
 
-    .dancer-wrap {
-      position: absolute;
-      bottom: 0;
-      left: 0%;
-      transform: translateX(-100%);
-      transition: left 0.25s ease;
-    }
-
-    #bullet-bill {
+    /* ---- Snake game ---- */
+    .snake-wrap { text-align: center; }
+    #snake-canvas {
       display: block;
+      margin: 0 auto;
+      border: 3px solid #306230;
       image-rendering: pixelated;
-      animation: bb-bounce 0.22s ease-in-out infinite alternate;
     }
-
-    #bb-teeth { animation: bb-chomp 0.22s steps(1, end) infinite; }
-
-    @keyframes bb-bounce {
-      from { transform: translateY(0); }
-      to   { transform: translateY(-3px); }
+    .snake-score {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      margin: 6px 0 10px;
+      font-variant-numeric: tabular-nums;
     }
-    @keyframes bb-chomp {
-      0%, 49%   { opacity: 1; }
-      50%, 100% { opacity: 0; }
+    .snake-dpad {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      margin-bottom: 10px;
     }
+    .dpad-row { display: flex; gap: 3px; }
+    .dpad-btn {
+      width: 44px;
+      height: 44px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      color: var(--text);
+    }
+    .dpad-btn:active { background: var(--border); }
+    .dpad-center { opacity: 0; pointer-events: none; }
 
     /* ---- Download button ---- */
     .btn-download {
@@ -335,12 +343,28 @@
 
     <!-- Processing status -->
     <div id="status-section">
-      <div class="dance-stage" id="dance-stage">
-        <div class="dancer-wrap" id="dancer-wrap">
-          <svg id="bullet-bill" viewBox="0 0 64 48" width="64" height="48" overflow="visible" aria-hidden="true"></svg>
-        </div>
-        <div class="dance-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="dance-track">
-          <div class="dance-fill" id="dance-fill"></div>
+      <div class="prog-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="prog-track">
+        <div class="prog-fill" id="prog-fill"></div>
+      </div>
+      <div class="snake-wrap">
+        <canvas id="snake-canvas" width="200" height="200"></canvas>
+        <p class="snake-score">Score: <span id="snake-score">0</span></p>
+        <div class="snake-dpad" aria-label="Snake controls">
+          <div class="dpad-row">
+            <button class="dpad-btn dpad-center" tabindex="-1" aria-hidden="true"></button>
+            <button class="dpad-btn" id="dpad-up"    aria-label="Up">&#9650;</button>
+            <button class="dpad-btn dpad-center" tabindex="-1" aria-hidden="true"></button>
+          </div>
+          <div class="dpad-row">
+            <button class="dpad-btn" id="dpad-left"  aria-label="Left">&#9664;</button>
+            <button class="dpad-btn dpad-center" tabindex="-1" aria-hidden="true"></button>
+            <button class="dpad-btn" id="dpad-right" aria-label="Right">&#9654;</button>
+          </div>
+          <div class="dpad-row">
+            <button class="dpad-btn dpad-center" tabindex="-1" aria-hidden="true"></button>
+            <button class="dpad-btn" id="dpad-down"  aria-label="Down">&#9660;</button>
+            <button class="dpad-btn dpad-center" tabindex="-1" aria-hidden="true"></button>
+          </div>
         </div>
       </div>
       <p class="status-text" id="status-text">Initializing…</p>
@@ -411,45 +435,139 @@
 
     function setProgress(pct, message) {
       pct = Math.max(0, Math.min(100, Math.round(pct)));
-      document.getElementById('dance-fill').style.width = pct + '%';
-      document.getElementById('dance-track').setAttribute('aria-valuenow', pct);
-      document.getElementById('dancer-wrap').style.left = pct + '%';
+      document.getElementById('prog-fill').style.width = pct + '%';
+      document.getElementById('prog-track').setAttribute('aria-valuenow', pct);
       if (message !== undefined) document.getElementById('status-text').textContent = message;
       document.getElementById('progress-pct').textContent = pct > 0 ? pct + '%' : '';
     }
 
-    // ─── Bullet Bill pixel art ───────────────────────────────────────────────
-    (function () {
-      // 16 × 12 pixel grid, 4 CSS px per pixel = 64 × 48
-      // X=black  g=gray  s=silver  w=white  r=red  d=dark
-      const rows = [
-        '....XXXXXXXX....',  // 0  top arc
-        '..XXXXXXXXXXXX..',  // 1
-        '.XXXXXXXXXXXXXX.',  // 2
-        'XXXXXXXXXXXXXXXX',  // 3
-        'XgsXXXXXXXXwrXXX',  // 4  eye white + red brow
-        'XgsXXXXXXXXrwdXX',  // 5  eye: red / white / dark pupil
-        'XXXXXXXXXXXXXXXX',  // 6
-        'XgsXXXXXXXrrrrXX',  // 7  red mouth/gums
-        'XXXXXXXXXXwXwXXX',  // 8  teeth (animated — put in #bb-teeth)
-        'XXXXXXXXXXXXXXXX',  // 9
-        '..XXXXXXXXXXXX..',  // 10
-        '....XXXXXXXX....',  // 11 bottom arc
-      ];
-      const c = { X: '#111', g: '#555', s: '#bbb', w: '#eee', r: '#c00', d: '#222' };
-      const px = 4;
-      const svg = document.getElementById('bullet-bill');
-      if (!svg) return;
-      let body = '', teeth = '';
-      rows.forEach((row, y) => {
-        [...row].forEach((ch, x) => {
-          if (!c[ch]) return;
-          const rect = `<rect x="${x * px}" y="${y * px}" width="${px}" height="${px}" fill="${c[ch]}"/>`;
-          if (y === 8) teeth += rect; else body += rect;
+    // ─── Snake game ──────────────────────────────────────────────────────────
+    let snakeHandle = null;
+
+    function initSnake() {
+      const canvas = document.getElementById('snake-canvas');
+      if (!canvas || snakeHandle) return;
+
+      const COLS = 20, ROWS = 20, CELL = 10;
+      const C_BG = '#9bbc0f', C_DARK = '#0f380f', C_MID = '#306230';
+      const ctx = canvas.getContext('2d');
+
+      let snake, dir, queued, food, score, loopId, speed;
+
+      function respawn() {
+        snake  = [{ x: 12, y: 10 }, { x: 11, y: 10 }, { x: 10, y: 10 }];
+        dir    = { x: 1, y: 0 };
+        queued = { x: 1, y: 0 };
+        score  = 0;
+        speed  = 150;
+        document.getElementById('snake-score').textContent = score;
+        placeFood();
+        clearInterval(loopId);
+        loopId = setInterval(tick, speed);
+      }
+
+      function placeFood() {
+        let p;
+        do { p = { x: (Math.random() * COLS) | 0, y: (Math.random() * ROWS) | 0 }; }
+        while (snake.some(s => s.x === p.x && s.y === p.y));
+        food = p;
+      }
+
+      function tick() {
+        dir = queued;
+        const head = {
+          x: (snake[0].x + dir.x + COLS) % COLS,
+          y: (snake[0].y + dir.y + ROWS) % ROWS,
+        };
+        // Self-collision → game over flash then restart
+        if (snake.some(s => s.x === head.x && s.y === head.y)) {
+          clearInterval(loopId);
+          flashDead();
+          return;
+        }
+        snake.unshift(head);
+        if (head.x === food.x && head.y === food.y) {
+          score++;
+          document.getElementById('snake-score').textContent = score;
+          placeFood();
+          if (score % 5 === 0) {
+            speed = Math.max(70, speed - 8);
+            clearInterval(loopId);
+            loopId = setInterval(tick, speed);
+          }
+        } else {
+          snake.pop();
+        }
+        draw();
+      }
+
+      function draw() {
+        ctx.fillStyle = C_BG;
+        ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL);
+        ctx.fillStyle = C_MID;
+        ctx.fillRect(food.x * CELL + 2, food.y * CELL + 2, CELL - 4, CELL - 4);
+        snake.forEach((s, i) => {
+          ctx.fillStyle = i === 0 ? C_DARK : C_MID;
+          ctx.fillRect(s.x * CELL + 1, s.y * CELL + 1, CELL - 2, CELL - 2);
         });
-      });
-      svg.innerHTML = body + `<g id="bb-teeth">${teeth}</g>`;
-    }());
+      }
+
+      let flashCount = 0;
+      function flashDead() {
+        flashCount = 0;
+        const id = setInterval(() => {
+          ctx.fillStyle = flashCount % 2 === 0 ? C_DARK : C_BG;
+          ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL);
+          if (++flashCount >= 6) { clearInterval(id); respawn(); }
+        }, 120);
+      }
+
+      function steer(dx, dy) {
+        if (dx !== 0 && dir.x !== 0) return;
+        if (dy !== 0 && dir.y !== 0) return;
+        queued = { x: dx, y: dy };
+      }
+
+      // Keyboard
+      const keyMap = {
+        ArrowUp: [0,-1], ArrowDown: [0,1], ArrowLeft: [-1,0], ArrowRight: [1,0],
+        w: [0,-1], s: [0,1], a: [-1,0], d: [1,0],
+      };
+      function onKey(e) {
+        if (keyMap[e.key]) { e.preventDefault(); steer(...keyMap[e.key]); }
+      }
+      document.addEventListener('keydown', onKey);
+
+      // D-pad buttons
+      document.getElementById('dpad-up').addEventListener('click',    () => steer( 0,-1));
+      document.getElementById('dpad-down').addEventListener('click',   () => steer( 0, 1));
+      document.getElementById('dpad-left').addEventListener('click',   () => steer(-1, 0));
+      document.getElementById('dpad-right').addEventListener('click',  () => steer( 1, 0));
+
+      // Swipe on canvas
+      let t0 = null;
+      canvas.addEventListener('touchstart', e => { t0 = e.touches[0]; e.preventDefault(); }, { passive: false });
+      canvas.addEventListener('touchend', e => {
+        if (!t0) return;
+        const dx = e.changedTouches[0].clientX - t0.clientX;
+        const dy = e.changedTouches[0].clientY - t0.clientY;
+        Math.abs(dx) > Math.abs(dy) ? steer(dx > 0 ? 1 : -1, 0) : steer(0, dy > 0 ? 1 : -1);
+        t0 = null;
+        e.preventDefault();
+      }, { passive: false });
+
+      snakeHandle = {
+        stop() {
+          clearInterval(loopId);
+          document.removeEventListener('keydown', onKey);
+        }
+      };
+      respawn();
+    }
+
+    function stopSnake() {
+      if (snakeHandle) { snakeHandle.stop(); snakeHandle = null; }
+    }
 
     function updateProgress(completed, total, message) {
       const pct = total > 0 ? (completed / total) * 100 : 0;
@@ -494,6 +612,7 @@
 
     // ─── Download / reset ────────────────────────────────────────────────────
     function triggerDownload(pdfBytes, filename) {
+      stopSnake();
       if (lastDownloadUrl) URL.revokeObjectURL(lastDownloadUrl);
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       lastDownloadUrl = URL.createObjectURL(blob);
@@ -787,6 +906,7 @@
       }
 
       showSection('status');
+      initSnake();
       setProgress(0, 'Initializing OCR engine…');
       document.getElementById('status-note').textContent = 'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.';
 
