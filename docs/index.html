@@ -198,7 +198,7 @@
       position: absolute;
       bottom: 0;
       left: 0%;
-      transform: translateX(-50%);
+      transform: translateX(-100%);
       transition: left 0.25s ease;
     }
 
@@ -413,7 +413,7 @@
       pct = Math.max(0, Math.min(100, Math.round(pct)));
       document.getElementById('dance-fill').style.width = pct + '%';
       document.getElementById('dance-track').setAttribute('aria-valuenow', pct);
-      document.getElementById('dancer-wrap').style.left = Math.max(2, Math.min(98, pct)) + '%';
+      document.getElementById('dancer-wrap').style.left = pct + '%';
       if (message !== undefined) document.getElementById('status-text').textContent = message;
       document.getElementById('progress-pct').textContent = pct > 0 ? pct + '%' : '';
     }
