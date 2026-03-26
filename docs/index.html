@@ -203,29 +203,6 @@
       margin: 6px 0 10px;
       font-variant-numeric: tabular-nums;
     }
-    .snake-dpad {
-      display: inline-flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 3px;
-      margin-bottom: 10px;
-    }
-    .dpad-row { display: flex; gap: 3px; }
-    .dpad-btn {
-      width: 44px;
-      height: 44px;
-      border: 1px solid var(--border);
-      background: var(--bg);
-      border-radius: 8px;
-      font-size: 14px;
-      cursor: pointer;
-      touch-action: manipulation;
-      -webkit-tap-highlight-color: transparent;
-      user-select: none;
-      color: var(--text);
-    }
-    .dpad-btn:active { background: var(--border); }
-    .dpad-center { opacity: 0; pointer-events: none; }
 
     /* ---- Download button ---- */
     .btn-download {
@@ -349,23 +326,6 @@
       <div class="snake-wrap">
         <canvas id="snake-canvas" width="200" height="200"></canvas>
         <p class="snake-score">Score: <span id="snake-score">0</span></p>
-        <div class="snake-dpad" aria-label="Snake controls">
-          <div class="dpad-row">
-            <button class="dpad-btn dpad-center" tabindex="-1" aria-hidden="true"></button>
-            <button class="dpad-btn" id="dpad-up"    aria-label="Up">&#9650;</button>
-            <button class="dpad-btn dpad-center" tabindex="-1" aria-hidden="true"></button>
-          </div>
-          <div class="dpad-row">
-            <button class="dpad-btn" id="dpad-left"  aria-label="Left">&#9664;</button>
-            <button class="dpad-btn dpad-center" tabindex="-1" aria-hidden="true"></button>
-            <button class="dpad-btn" id="dpad-right" aria-label="Right">&#9654;</button>
-          </div>
-          <div class="dpad-row">
-            <button class="dpad-btn dpad-center" tabindex="-1" aria-hidden="true"></button>
-            <button class="dpad-btn" id="dpad-down"  aria-label="Down">&#9660;</button>
-            <button class="dpad-btn dpad-center" tabindex="-1" aria-hidden="true"></button>
-          </div>
-        </div>
       </div>
       <p class="status-text" id="status-text">Initializing…</p>
       <p class="progress-pct" id="progress-pct"></p>
@@ -459,7 +419,7 @@
         dir    = { x: 1, y: 0 };
         queued = { x: 1, y: 0 };
         score  = 0;
-        speed  = 150;
+        speed  = 750;
         document.getElementById('snake-score').textContent = score;
         placeFood();
         clearInterval(loopId);
@@ -476,13 +436,19 @@
       function tick() {
         dir = queued;
         const head = {
-          x: (snake[0].x + dir.x + COLS) % COLS,
-          y: (snake[0].y + dir.y + ROWS) % ROWS,
+          x: snake[0].x + dir.x,
+          y: snake[0].y + dir.y,
         };
-        // Self-collision → game over flash then restart
+        // Wall collision → game over
+        if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS) {
+          clearInterval(loopId);
+          showGameOver();
+          return;
+        }
+        // Self-collision → game over
         if (snake.some(s => s.x === head.x && s.y === head.y)) {
           clearInterval(loopId);
-          flashDead();
+          showGameOver();
           return;
         }
         snake.unshift(head);
@@ -491,7 +457,7 @@
           document.getElementById('snake-score').textContent = score;
           placeFood();
           if (score % 5 === 0) {
-            speed = Math.max(70, speed - 8);
+            speed = Math.max(350, speed - 40);
             clearInterval(loopId);
             loopId = setInterval(tick, speed);
           }
@@ -512,14 +478,25 @@
         });
       }
 
-      let flashCount = 0;
-      function flashDead() {
-        flashCount = 0;
-        const id = setInterval(() => {
-          ctx.fillStyle = flashCount % 2 === 0 ? C_DARK : C_BG;
-          ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL);
-          if (++flashCount >= 6) { clearInterval(id); respawn(); }
-        }, 120);
+      let gameOver = false;
+      function showGameOver() {
+        gameOver = true;
+        const W = COLS * CELL, H = ROWS * CELL;
+        ctx.fillStyle = C_DARK;
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = C_BG;
+        ctx.font = 'bold 14px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('GAME OVER', W / 2, H / 2 - 14);
+        ctx.font = '10px monospace';
+        ctx.fillText('Score: ' + score, W / 2, H / 2);
+        ctx.fillText('Tap or swipe to play again', W / 2, H / 2 + 16);
+      }
+
+      function handlePlayAgain() {
+        if (!gameOver) return;
+        gameOver = false;
+        respawn();
       }
 
       function steer(dx, dy) {
@@ -534,15 +511,10 @@
         w: [0,-1], s: [0,1], a: [-1,0], d: [1,0],
       };
       function onKey(e) {
+        if (gameOver) { handlePlayAgain(); return; }
         if (keyMap[e.key]) { e.preventDefault(); steer(...keyMap[e.key]); }
       }
       document.addEventListener('keydown', onKey);
-
-      // D-pad buttons
-      document.getElementById('dpad-up').addEventListener('click',    () => steer( 0,-1));
-      document.getElementById('dpad-down').addEventListener('click',   () => steer( 0, 1));
-      document.getElementById('dpad-left').addEventListener('click',   () => steer(-1, 0));
-      document.getElementById('dpad-right').addEventListener('click',  () => steer( 1, 0));
 
       // Swipe on canvas
       let t0 = null;
@@ -551,9 +523,10 @@
         if (!t0) return;
         const dx = e.changedTouches[0].clientX - t0.clientX;
         const dy = e.changedTouches[0].clientY - t0.clientY;
-        Math.abs(dx) > Math.abs(dy) ? steer(dx > 0 ? 1 : -1, 0) : steer(0, dy > 0 ? 1 : -1);
         t0 = null;
         e.preventDefault();
+        if (gameOver) { handlePlayAgain(); return; }
+        Math.abs(dx) > Math.abs(dy) ? steer(dx > 0 ? 1 : -1, 0) : steer(0, dy > 0 ? 1 : -1);
       }, { passive: false });
 
       snakeHandle = {
