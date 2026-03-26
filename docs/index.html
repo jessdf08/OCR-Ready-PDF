@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <title>OCR PDF Converter</title>
 
   <style>
@@ -183,12 +185,6 @@
     .btn-primary:not(:disabled):active { transform: scale(0.97); }
 
     /* ---- Status section ---- */
-    #status-section {
-      display: none;
-      text-align: center;
-      padding: 12px 0 4px;
-    }
-
     .status-text {
       font-size: 15px;
       font-weight: 500;
@@ -231,23 +227,131 @@
       animation: shimmer 2s linear infinite;
     }
 
-    /* ---- Snake game ---- */
-    .snake-wrap { text-align: center; }
-    #snake-canvas {
+    /* ─── Bento dashboard (status screen) ─── */
+    #status-section {
+      display: none;
+      margin: -28px -24px;
+    }
+    .bento-grid {
+      --d-bg: #0d1117;
+      --d-tile: #161b22;
+      --d-border: #30363d;
+      --d-text: #e6edf3;
+      --d-muted: #7d8590;
+      --d-blue: #58a6ff;
+      --d-lime: #7ee787;
+      --d-orange: #ff9f0a;
+      background: var(--d-bg);
+      border-radius: var(--radius);
+      padding: 16px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+    }
+    .bento-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .bento-title-text {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--d-text);
+      text-transform: uppercase;
+    }
+    .bento-subtitle-text {
+      font-size: 9px;
+      color: var(--d-muted);
+      margin-top: 3px;
+      letter-spacing: 0.03em;
+    }
+    .bento-stats { display: flex; flex-direction: column; gap: 5px; align-items: flex-end; }
+    .stat-badge {
+      background: var(--d-tile);
+      border: 1px solid var(--d-border);
+      border-radius: 5px;
+      padding: 4px 8px;
+      font-size: 9px;
+      color: var(--d-muted);
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+      text-transform: uppercase;
+    }
+    .stat-badge .badge-val { color: var(--d-blue); font-weight: 600; }
+    .conf-badge .badge-val { color: var(--d-lime); }
+    .bento-middle { display: flex; gap: 10px; align-items: flex-start; }
+    .bento-left { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+    .progress-ring { width: 150px; height: 150px; margin: 0 auto; display: block; }
+    .ring-bg { fill: none; stroke: var(--d-border); stroke-width: 7; }
+    .ring-fill {
+      fill: none;
+      stroke: url(#ring-grad);
+      stroke-width: 7;
+      stroke-linecap: round;
+      transform-origin: 100px 100px;
+      transform: rotate(-90deg);
+      stroke-dasharray: 502.655;
+      stroke-dashoffset: 502.655;
+      transition: stroke-dashoffset 0.4s ease;
+    }
+    .ring-pct-text {
+      font-size: 28px;
+      font-weight: 700;
+      fill: var(--d-text);
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .ring-sublabel { font-size: 8px; fill: var(--d-muted); letter-spacing: 0.07em; }
+    .log-panel {
+      background: var(--d-tile);
+      border: 1px solid var(--d-border);
+      border-radius: 7px;
+      padding: 7px 9px;
+      height: 80px;
+      overflow-y: auto;
+      scrollbar-width: none;
+      font-size: 9px;
+      line-height: 1.75;
+      color: var(--d-muted);
+    }
+    .log-panel::-webkit-scrollbar { display: none; }
+    .log-entry { display: block; }
+    .log-ts { color: var(--d-blue); }
+    .log-ok { color: var(--d-lime); }
+    .log-active { color: var(--d-orange); }
+    .bento-right {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      width: 95px;
+      flex-shrink: 0;
+    }
+    #preview-canvas {
+      width: 100%;
+      border-radius: 4px;
+      border: 1px solid var(--d-border);
+      background: #0a0a0f;
       display: block;
-      margin: 0 auto;
-      border: none;
-      border-radius: 12px;
-      box-shadow: 0 0 0 3px #306230, 0 4px 24px rgba(48,98,48,.40);
-      image-rendering: pixelated;
     }
-    .snake-score {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--muted);
-      margin: 8px 0 12px;
-      font-variant-numeric: tabular-nums;
+    .preview-track { width: 100%; height: 3px; background: var(--d-border); border-radius: 2px; overflow: hidden; }
+    .preview-fill { height: 100%; background: var(--d-blue); border-radius: 2px; width: 0%; transition: width 0.3s ease; }
+    .preview-label { font-size: 9px; color: var(--d-muted); text-align: center; }
+    .bento-viz {
+      background: var(--d-tile);
+      border: 1px solid var(--d-border);
+      border-radius: 8px;
+      padding: 10px 10px 8px;
     }
+    .viz-title { font-size: 8.5px; letter-spacing: 0.07em; color: var(--d-text); text-transform: uppercase; margin-bottom: 2px; }
+    .viz-sub { font-size: 8px; color: var(--d-muted); margin-bottom: 8px; }
+    #neural-canvas { display: block; width: 100%; height: 140px; border-radius: 4px; background: var(--d-bg); }
+    .bento-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 2px; }
+    .wasm-badge { font-size: 9px; letter-spacing: 0.06em; color: var(--d-muted); text-transform: uppercase; }
+    #status-section .status-note { font-size: 9px; color: var(--d-muted); text-align: right; margin: 0; }
+    .bento-compat { display: none; }
 
     /* ---- Download button ---- */
     .btn-download {
@@ -322,8 +426,8 @@
 </head>
 <body>
   <div class="card">
-    <h1>OCR PDF Converter</h1>
-    <p class="subtitle">Turn photos or scanned PDFs into searchable PDFs — right in your browser.</p>
+    <h1 id="app-heading">OCR PDF Converter</h1>
+    <p class="subtitle" id="app-subtitle">Turn photos or scanned PDFs into searchable PDFs — right in your browser.</p>
 
     <!-- Error banner -->
     <div class="error-box" id="error-box"></div>
@@ -373,16 +477,68 @@
 
     <!-- Processing status -->
     <div id="status-section">
-      <div class="prog-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="prog-track">
-        <div class="prog-fill" id="prog-fill"></div>
+      <div class="bento-grid">
+
+        <!-- Row 1: Header + stats -->
+        <div class="bento-header">
+          <div>
+            <div class="bento-title-text">OCR PDF CONVERTER</div>
+            <div class="bento-subtitle-text">locally processed in your browser</div>
+          </div>
+          <div class="bento-stats">
+            <div class="stat-badge">TOTAL PROCESSED: <span class="badge-val" id="stat-pages-val">0</span> PAGES</div>
+            <div class="stat-badge conf-badge">CONFIDENCE: <span class="badge-val" id="stat-conf-val">—</span></div>
+          </div>
+        </div>
+
+        <!-- Row 2: Ring + log | page preview -->
+        <div class="bento-middle">
+          <div class="bento-left">
+            <svg class="progress-ring" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="ring-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#58a6ff"/>
+                  <stop offset="100%" stop-color="#7ee787"/>
+                </linearGradient>
+              </defs>
+              <circle class="ring-bg" cx="100" cy="100" r="80"/>
+              <circle class="ring-fill" id="ring-fill" cx="100" cy="100" r="80"/>
+              <text class="ring-pct-text" id="ring-pct-text" x="100" y="96" text-anchor="middle" dominant-baseline="middle">0%</text>
+              <text class="ring-sublabel" id="ring-sublabel" x="100" y="118" text-anchor="middle">INITIALIZING</text>
+            </svg>
+            <div class="log-panel" id="log-panel"></div>
+          </div>
+          <div class="bento-right">
+            <canvas id="preview-canvas" width="110" height="128"></canvas>
+            <div class="preview-track">
+              <div class="preview-fill" id="preview-fill"></div>
+            </div>
+            <p class="preview-label" id="preview-label">—</p>
+          </div>
+        </div>
+
+        <!-- Row 3: Neural lattice visualization -->
+        <div class="bento-viz">
+          <div class="viz-title">REAL-TIME NEURAL CHARACTER IDENTIFICATION: <span id="viz-page">PAGE 1</span></div>
+          <div class="viz-sub">Lattice Activation and Data Flow</div>
+          <canvas id="neural-canvas" width="400" height="140"></canvas>
+        </div>
+
+        <!-- Row 4: Footer -->
+        <div class="bento-footer">
+          <div class="wasm-badge">LOCAL PROCESSING | (WASM) ⓘ</div>
+          <p class="status-note" id="status-note"></p>
+        </div>
       </div>
-      <div class="snake-wrap">
-        <canvas id="snake-canvas" width="200" height="200"></canvas>
-        <p class="snake-score">Score: <span id="snake-score">0</span></p>
+
+      <!-- Hidden compat elements (pipeline writes to these) -->
+      <div class="bento-compat" aria-hidden="true">
+        <div id="prog-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div id="prog-fill"></div>
+        </div>
+        <p id="status-text"></p>
+        <p id="progress-pct"></p>
       </div>
-      <p class="status-text" id="status-text">Initializing…</p>
-      <p class="progress-pct" id="progress-pct"></p>
-      <p class="status-note" id="status-note">First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.</p>
     </div>
 
     <!-- Done: download -->
@@ -396,7 +552,7 @@
       <button class="btn-secondary" onclick="resetApp()">Convert another file</button>
     </div>
 
-    <p class="footer-note">All processing happens in your browser &middot; No files are uploaded</p>
+    <p class="footer-note" id="app-footer">All processing happens in your browser &middot; No files are uploaded</p>
   </div>
 
   <!-- Load libraries at end of body so HTML renders first (order still matters) -->
@@ -421,6 +577,11 @@
     function showSection(name) {
       ['upload', 'status', 'done'].forEach(id => {
         document.getElementById(id + '-section').style.display = id === name ? 'block' : 'none';
+      });
+      const isStatus = name === 'status';
+      ['app-heading', 'app-subtitle', 'app-footer'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = isStatus ? 'none' : '';
       });
     }
 
@@ -448,10 +609,25 @@
 
     function setProgress(pct, message) {
       pct = Math.max(0, Math.min(100, Math.round(pct)));
-      document.getElementById('prog-fill').style.width = pct + '%';
-      document.getElementById('prog-track').setAttribute('aria-valuenow', pct);
-      if (message !== undefined) document.getElementById('status-text').textContent = message;
-      document.getElementById('progress-pct').textContent = pct > 0 ? pct + '%' : '';
+      // Update hidden compat elements
+      const fill = document.getElementById('prog-fill');
+      const track = document.getElementById('prog-track');
+      if (fill) fill.style.width = pct + '%';
+      if (track) track.setAttribute('aria-valuenow', pct);
+      if (message !== undefined) {
+        const st = document.getElementById('status-text');
+        if (st) st.textContent = message;
+      }
+      const pp = document.getElementById('progress-pct');
+      if (pp) pp.textContent = pct > 0 ? pct + '%' : '';
+      // Update bento ring
+      const circumference = 502.655;
+      const ringEl = document.getElementById('ring-fill');
+      if (ringEl) ringEl.style.strokeDashoffset = circumference * (1 - pct / 100);
+      const pctText = document.getElementById('ring-pct-text');
+      if (pctText) pctText.textContent = pct + '%';
+      const sub = document.getElementById('ring-sublabel');
+      if (sub && message) sub.textContent = message.length > 22 ? message.slice(0, 22) + '…' : message;
     }
 
     // ─── Snake game ──────────────────────────────────────────────────────────
