@@ -419,7 +419,7 @@
         dir    = { x: 1, y: 0 };
         queued = { x: 1, y: 0 };
         score  = 0;
-        speed  = 750;
+        speed  = 600;
         document.getElementById('snake-score').textContent = score;
         placeFood();
         clearInterval(loopId);
@@ -457,7 +457,7 @@
           document.getElementById('snake-score').textContent = score;
           placeFood();
           if (score % 5 === 0) {
-            speed = Math.max(350, speed - 40);
+            speed = Math.max(280, speed - 32);
             clearInterval(loopId);
             loopId = setInterval(tick, speed);
           }
