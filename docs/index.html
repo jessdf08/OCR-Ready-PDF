@@ -630,145 +630,154 @@
       if (sub && message) sub.textContent = message.length > 22 ? message.slice(0, 22) + '…' : message;
     }
 
-    // ─── Snake game ──────────────────────────────────────────────────────────
-    let snakeHandle = null;
+    // ─── Neural lattice animation ─────────────────────────────────────────────
+    let neuralHandle = null;
+    let totalPagesProcessed = 0;
+    let totalConfidenceSum = 0;
+    let confidenceCount = 0;
 
-    function initSnake() {
-      const canvas = document.getElementById('snake-canvas');
-      if (!canvas || snakeHandle) return;
-
-      const COLS = 20, ROWS = 20, CELL = 10;
-      const C_BG = '#9bbc0f', C_DARK = '#0f380f', C_MID = '#306230';
+    function initNeural() {
+      const canvas = document.getElementById('neural-canvas');
+      if (!canvas || neuralHandle) return;
       const ctx = canvas.getContext('2d');
+      // Match canvas pixel dimensions to its CSS size
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const CW = (rect.width || 400);
+      const CH = (rect.height || 140);
+      canvas.width = Math.round(CW * dpr);
+      canvas.height = Math.round(CH * dpr);
+      ctx.scale(dpr, dpr);
 
-      let snake, dir, queued, food, score, loopId, speed;
+      const N = 110;
+      const particles = Array.from({ length: N }, () => ({
+        x: (Math.random() - 0.5) * 260,
+        y: (Math.random() - 0.5) * 110,
+        z: (Math.random() - 0.5) * 260,
+        pulse: Math.random() * Math.PI * 2,
+        pulseSpeed: 0.012 + Math.random() * 0.022,
+        lime: Math.random() > 0.62,
+      }));
 
-      function respawn() {
-        snake  = [{ x: 12, y: 10 }, { x: 11, y: 10 }, { x: 10, y: 10 }];
-        dir    = { x: 1, y: 0 };
-        queued = { x: 1, y: 0 };
-        score  = 0;
-        speed  = 600;
-        document.getElementById('snake-score').textContent = score;
-        placeFood();
-        clearInterval(loopId);
-        loopId = setInterval(tick, speed);
-      }
+      let angle = 0;
+      let rafId;
 
-      function placeFood() {
-        let p;
-        do { p = { x: (Math.random() * COLS) | 0, y: (Math.random() * ROWS) | 0 }; }
-        while (snake.some(s => s.x === p.x && s.y === p.y));
-        food = p;
-      }
-
-      function tick() {
-        dir = queued;
-        const head = {
-          x: snake[0].x + dir.x,
-          y: snake[0].y + dir.y,
-        };
-        // Wall collision → game over
-        if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS) {
-          clearInterval(loopId);
-          showGameOver();
-          return;
-        }
-        // Self-collision → game over
-        if (snake.some(s => s.x === head.x && s.y === head.y)) {
-          clearInterval(loopId);
-          showGameOver();
-          return;
-        }
-        snake.unshift(head);
-        if (head.x === food.x && head.y === food.y) {
-          score++;
-          document.getElementById('snake-score').textContent = score;
-          placeFood();
-          if (score % 5 === 0) {
-            speed = Math.max(280, speed - 32);
-            clearInterval(loopId);
-            loopId = setInterval(tick, speed);
-          }
-        } else {
-          snake.pop();
-        }
-        draw();
+      function project(x, y, z) {
+        const cos = Math.cos(angle), sin = Math.sin(angle);
+        const rx = x * cos - z * sin;
+        const rz = x * sin + z * cos;
+        const fov = 340;
+        const s = fov / (fov + rz);
+        return { sx: CW / 2 + rx * s * 0.88, sy: CH / 2 + (y - rz * 0.32) * s * 0.72, s, rz };
       }
 
       function draw() {
-        ctx.fillStyle = C_BG;
-        ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL);
-        ctx.fillStyle = C_MID;
-        ctx.fillRect(food.x * CELL + 2, food.y * CELL + 2, CELL - 4, CELL - 4);
-        snake.forEach((s, i) => {
-          ctx.fillStyle = i === 0 ? C_DARK : C_MID;
-          ctx.fillRect(s.x * CELL + 1, s.y * CELL + 1, CELL - 2, CELL - 2);
+        ctx.clearRect(0, 0, CW, CH);
+
+        angle += 0.004;
+
+        const pts = particles.map((p, i) => {
+          p.pulse += p.pulseSpeed;
+          const b = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(p.pulse));
+          return { ...project(p.x, p.y, p.z), b, lime: p.lime, i };
         });
-      }
+        pts.sort((a, b2) => b2.rz - a.rz);
 
-      let gameOver = false;
-      function showGameOver() {
-        gameOver = true;
-        const W = COLS * CELL, H = ROWS * CELL;
-        ctx.fillStyle = C_DARK;
-        ctx.fillRect(0, 0, W, H);
-        ctx.fillStyle = C_BG;
-        ctx.font = 'bold 14px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('GAME OVER', W / 2, H / 2 - 14);
-        ctx.font = '10px monospace';
-        ctx.fillText('Score: ' + score, W / 2, H / 2);
-        ctx.fillText('Tap or swipe to play again', W / 2, H / 2 + 16);
-      }
-
-      function handlePlayAgain() {
-        if (!gameOver) return;
-        gameOver = false;
-        respawn();
-      }
-
-      function steer(dx, dy) {
-        if (dx !== 0 && dir.x !== 0) return;
-        if (dy !== 0 && dir.y !== 0) return;
-        queued = { x: dx, y: dy };
-      }
-
-      // Keyboard
-      const keyMap = {
-        ArrowUp: [0,-1], ArrowDown: [0,1], ArrowLeft: [-1,0], ArrowRight: [1,0],
-        w: [0,-1], s: [0,1], a: [-1,0], d: [1,0],
-      };
-      function onKey(e) {
-        if (gameOver) { handlePlayAgain(); return; }
-        if (keyMap[e.key]) { e.preventDefault(); steer(...keyMap[e.key]); }
-      }
-      document.addEventListener('keydown', onKey);
-
-      // Swipe on canvas
-      let t0 = null;
-      canvas.addEventListener('touchstart', e => { t0 = e.touches[0]; e.preventDefault(); }, { passive: false });
-      canvas.addEventListener('touchend', e => {
-        if (!t0) return;
-        const dx = e.changedTouches[0].clientX - t0.clientX;
-        const dy = e.changedTouches[0].clientY - t0.clientY;
-        t0 = null;
-        e.preventDefault();
-        if (gameOver) { handlePlayAgain(); return; }
-        Math.abs(dx) > Math.abs(dy) ? steer(dx > 0 ? 1 : -1, 0) : steer(0, dy > 0 ? 1 : -1);
-      }, { passive: false });
-
-      snakeHandle = {
-        stop() {
-          clearInterval(loopId);
-          document.removeEventListener('keydown', onKey);
+        // Connections
+        for (let i = 0; i < pts.length; i++) {
+          const pi = particles[pts[i].i];
+          for (let j = i + 1; j < pts.length; j++) {
+            const pj = particles[pts[j].i];
+            const dx = pi.x - pj.x, dy = pi.y - pj.y, dz = pi.z - pj.z;
+            const dist2 = dx * dx + dy * dy + dz * dz;
+            if (dist2 < 70 * 70) {
+              const alpha = (1 - Math.sqrt(dist2) / 70) * 0.16 * ((pts[i].b + pts[j].b) / 2);
+              ctx.strokeStyle = (pts[i].lime || pts[j].lime)
+                ? `rgba(126,231,135,${alpha})` : `rgba(88,166,255,${alpha})`;
+              ctx.lineWidth = 0.5;
+              ctx.beginPath();
+              ctx.moveTo(pts[i].sx, pts[i].sy);
+              ctx.lineTo(pts[j].sx, pts[j].sy);
+              ctx.stroke();
+            }
+          }
         }
-      };
-      respawn();
+
+        // Dots
+        for (const p of pts) {
+          const r = (0.7 + p.s * 1.4) * (0.6 + p.b * 0.7);
+          const col = p.lime
+            ? `rgba(126,231,135,${0.45 + p.b * 0.55})`
+            : `rgba(88,166,255,${0.35 + p.b * 0.65})`;
+          if (p.b > 0.76) {
+            const gr = ctx.createRadialGradient(p.sx, p.sy, 0, p.sx, p.sy, r * 5);
+            gr.addColorStop(0, p.lime ? 'rgba(126,231,135,0.22)' : 'rgba(88,166,255,0.18)');
+            gr.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = gr;
+            ctx.beginPath();
+            ctx.arc(p.sx, p.sy, r * 5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.fillStyle = col;
+          ctx.beginPath();
+          ctx.arc(p.sx, p.sy, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        rafId = requestAnimationFrame(draw);
+      }
+
+      draw();
+      neuralHandle = { stop() { cancelAnimationFrame(rafId); } };
     }
 
-    function stopSnake() {
-      if (snakeHandle) { snakeHandle.stop(); snakeHandle = null; }
+    function stopNeural() {
+      if (neuralHandle) { neuralHandle.stop(); neuralHandle = null; }
+    }
+
+    function addLog(message, type) {
+      const panel = document.getElementById('log-panel');
+      if (!panel) return;
+      const d = new Date();
+      const ts = d.toTimeString().slice(0, 8);
+      const entry = document.createElement('span');
+      entry.className = 'log-entry';
+      let badge, bClass;
+      if (type === 'ok')     { badge = ' [COMPLETE]'; bClass = 'log-ok'; }
+      else if (type === 'active') { badge = ' [ACTIVE]'; bClass = 'log-active'; }
+      else                   { badge = ' [SYNC]'; bClass = 'log-sync'; }
+      entry.innerHTML = `<span class="log-ts">[${ts}]</span> ${message}<span class="${bClass}">${badge}</span><br>`;
+      panel.appendChild(entry);
+      panel.scrollTop = panel.scrollHeight;
+    }
+
+    function setPagePreview(srcCanvas, pageNum, totalPages) {
+      const preview = document.getElementById('preview-canvas');
+      if (!preview) return;
+      const pCtx = preview.getContext('2d');
+      const PW = preview.width, PH = preview.height;
+      pCtx.fillStyle = '#0a0a0f';
+      pCtx.fillRect(0, 0, PW, PH);
+      const scale = Math.min(PW / srcCanvas.width, PH / srcCanvas.height) * 0.94;
+      const w = srcCanvas.width * scale, h = srcCanvas.height * scale;
+      pCtx.drawImage(srcCanvas, (PW - w) / 2, (PH - h) / 2, w, h);
+      const pct = totalPages > 0 ? (pageNum / totalPages) * 100 : 0;
+      const fillEl = document.getElementById('preview-fill');
+      if (fillEl) fillEl.style.width = pct + '%';
+      const lbl = document.getElementById('preview-label');
+      if (lbl) lbl.textContent = 'Page ' + pageNum + ' of ' + totalPages;
+      const vp = document.getElementById('viz-page');
+      if (vp) vp.textContent = 'PAGE ' + pageNum;
+    }
+
+    function updateStats(pagesDone, confidence) {
+      totalPagesProcessed = pagesDone;
+      if (confidence > 0) { totalConfidenceSum += confidence; confidenceCount++; }
+      const avg = confidenceCount > 0 ? Math.round(totalConfidenceSum / confidenceCount) : 0;
+      const pEl = document.getElementById('stat-pages-val');
+      const cEl = document.getElementById('stat-conf-val');
+      if (pEl) pEl.textContent = pagesDone;
+      if (cEl) cEl.textContent = confidenceCount > 0 ? avg + '%' : '—';
     }
 
     function updateProgress(completed, total, message) {
@@ -814,7 +823,7 @@
 
     // ─── Download / reset ────────────────────────────────────────────────────
     function triggerDownload(pdfBytes, filename) {
-      stopSnake();
+      stopNeural();
       if (lastDownloadUrl) URL.revokeObjectURL(lastDownloadUrl);
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       lastDownloadUrl = URL.createObjectURL(blob);
@@ -946,6 +955,10 @@
 
           const { data } = await worker.recognize(canvas);
           const words = (data.words || []).filter(w => w.text && w.text.trim());
+          const confidence = Math.round(data.confidence || 0);
+          setPagePreview(canvas, i + 1, total);
+          updateStats(i + 1, confidence);
+          addLog('PAGE ' + (i + 1) + ' CHARACTER EXTRACTION: ' + confidence + '% Confidence', confidence >= 80 ? 'ok' : 'active');
 
           setProgress(pageBase + pageSlice * 0.9, 'Encoding image ' + (i + 1) + '…');
           const jpegBytes = await canvasToJpegBytes(canvas, q);
@@ -1058,6 +1071,10 @@
           setProgress(pageBase + pageSlice * 0.2, 'OCR — page ' + pageNum + ' of ' + numPages + '…');
           const { data } = await worker.recognize(canvas);
           const words = (data.words || []).filter(w => w.text && w.text.trim());
+          const confidence = Math.round(data.confidence || 0);
+          setPagePreview(canvas, pageNum, numPages);
+          updateStats(pageNum, confidence);
+          addLog('PAGE ' + pageNum + ' CHARACTER EXTRACTION: ' + confidence + '% Confidence', confidence >= 80 ? 'ok' : 'active');
 
           setProgress(pageBase + pageSlice * 0.9, 'Building PDF…');
           const jpegBytes = await canvasToJpegBytes(canvas, quality);
@@ -1107,9 +1124,14 @@
         showWarn('Processing ' + files.length + ' images may be slow or use a lot of memory on mobile. Consider smaller batches if you experience issues.');
       }
 
+      // Reset stats for new run
+      totalPagesProcessed = 0;
+      totalConfidenceSum = 0;
+      confidenceCount = 0;
       showSection('status');
-      initSnake();
+      initNeural();
       setProgress(0, 'Initializing OCR engine…');
+      addLog('INITIALIZING OCR ENGINE', 'sync');
       document.getElementById('status-note').textContent = 'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.';
 
       try {
