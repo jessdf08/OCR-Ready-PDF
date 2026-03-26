@@ -13,18 +13,32 @@
       --accent-dark: #0051a3;
       --error: #c0392b;
       --bg: #f5f5f7;
-      --card: #ffffff;
+      --card: rgba(255,255,255,0.72);
       --text: #1d1d1f;
       --muted: #6e6e73;
       --border: #d2d2d7;
-      --radius: 14px;
+      --radius: 16px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --accent: #2997ff;
+        --accent-dark: #0071e3;
+        --error: #ff453a;
+        --bg: #000000;
+        --card: rgba(28,28,30,0.80);
+        --text: #f5f5f7;
+        --muted: #8e8e93;
+        --border: #38383a;
+      }
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: var(--bg);
+      background: linear-gradient(160deg, #dce8fd 0%, #f5f5f7 45%, #f8e4f5 100%);
+      background-attachment: fixed;
       color: var(--text);
       min-height: 100vh;
       padding: max(24px, env(safe-area-inset-top))
@@ -33,18 +47,36 @@
               max(16px, env(safe-area-inset-left));
     }
 
+    @media (prefers-color-scheme: dark) {
+      body {
+        background: linear-gradient(160deg, #0a1628 0%, #1c1c1e 45%, #1a0a20 100%);
+        background-attachment: fixed;
+      }
+    }
+
     .card {
       background: var(--card);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border: 1px solid rgba(255,255,255,0.45);
       border-radius: var(--radius);
       padding: 28px 24px;
       max-width: 480px;
       margin: 0 auto;
-      box-shadow: 0 2px 12px rgba(0,0,0,.08);
+      box-shadow: 0 8px 32px rgba(0,0,0,.12);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .card {
+        border-color: rgba(255,255,255,0.08);
+        box-shadow: 0 8px 32px rgba(0,0,0,.4);
+      }
     }
 
     h1 {
-      font-size: 22px;
+      font-size: 26px;
       font-weight: 700;
+      letter-spacing: -0.5px;
       margin-bottom: 6px;
     }
 
@@ -57,10 +89,10 @@
     /* ---- Mode toggle ---- */
     .mode-toggle {
       display: flex;
-      background: var(--bg);
+      background: rgba(120,120,128,0.12);
       border-radius: 10px;
-      padding: 4px;
-      gap: 4px;
+      padding: 3px;
+      gap: 3px;
       margin-bottom: 24px;
     }
 
@@ -75,13 +107,14 @@
       font-weight: 500;
       color: var(--muted);
       cursor: pointer;
-      transition: background .15s, color .15s;
+      transition: background .2s, color .2s, box-shadow .2s;
     }
 
     .mode-toggle button.active {
       background: var(--card);
       color: var(--text);
-      box-shadow: 0 1px 4px rgba(0,0,0,.12);
+      font-weight: 600;
+      box-shadow: 0 2px 8px rgba(0,0,0,.14);
     }
 
     /* ---- File picker ---- */
@@ -99,20 +132,22 @@
       justify-content: center;
       gap: 8px;
       width: 100%;
-      min-height: 56px;
-      padding: 14px 16px;
-      border: 2px dashed var(--border);
+      min-height: 64px;
+      padding: 16px;
+      border: 1.5px solid var(--border);
       border-radius: var(--radius);
       font-size: 16px;
       color: var(--accent);
       cursor: pointer;
-      transition: border-color .15s, background .15s;
+      transition: border-color .15s, background .15s, transform .2s cubic-bezier(0.34,1.56,0.64,1), box-shadow .15s;
       text-align: center;
     }
 
     .file-label:hover, .file-label:focus-within {
       border-color: var(--accent);
-      background: #f0f7ff;
+      background: rgba(0,113,227,0.05);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(0,113,227,.12);
     }
 
     .file-name {
@@ -129,14 +164,14 @@
       width: 100%;
       min-height: 52px;
       padding: 14px;
-      background: var(--accent);
+      background: linear-gradient(135deg, #0071e3 0%, #0051a3 100%);
       color: #fff;
       border: none;
       border-radius: var(--radius);
       font-size: 17px;
       font-weight: 600;
       cursor: pointer;
-      transition: background .15s, opacity .15s;
+      transition: opacity .15s, transform .1s;
     }
 
     .btn-primary:disabled {
@@ -144,7 +179,8 @@
       cursor: not-allowed;
     }
 
-    .btn-primary:not(:disabled):hover { background: var(--accent-dark); }
+    .btn-primary:not(:disabled):hover { opacity: .92; }
+    .btn-primary:not(:disabled):active { transform: scale(0.97); }
 
     /* ---- Status section ---- */
     #status-section {
@@ -173,19 +209,26 @@
     }
 
     /* ---- Progress track ---- */
+    @keyframes shimmer {
+      0%   { background-position: -400px 0; }
+      100% { background-position: 400px 0; }
+    }
+
     .prog-track {
-      height: 6px;
+      height: 8px;
       background: var(--border);
-      border-radius: 3px;
+      border-radius: 4px;
       overflow: hidden;
       margin-bottom: 12px;
     }
     .prog-fill {
       height: 100%;
-      background: var(--accent);
-      border-radius: 3px;
+      background: linear-gradient(90deg, #0071e3 0%, #34c759 100%);
+      background-size: 400px 100%;
+      border-radius: 4px;
       width: 0%;
       transition: width 0.25s ease;
+      animation: shimmer 2s linear infinite;
     }
 
     /* ---- Snake game ---- */
@@ -193,14 +236,16 @@
     #snake-canvas {
       display: block;
       margin: 0 auto;
-      border: 3px solid #306230;
+      border: none;
+      border-radius: 12px;
+      box-shadow: 0 0 0 3px #306230, 0 4px 24px rgba(48,98,48,.40);
       image-rendering: pixelated;
     }
     .snake-score {
       font-size: 13px;
       font-weight: 600;
       color: var(--muted);
-      margin: 6px 0 10px;
+      margin: 8px 0 12px;
       font-variant-numeric: tabular-nums;
     }
 
@@ -210,7 +255,7 @@
       width: 100%;
       min-height: 52px;
       padding: 14px;
-      background: #34c759;
+      background: linear-gradient(135deg, #34c759 0%, #1e9e3e 100%);
       color: #fff;
       border-radius: var(--radius);
       font-size: 17px;
@@ -218,9 +263,11 @@
       text-align: center;
       text-decoration: none;
       margin-bottom: 16px;
+      transition: opacity .15s, transform .1s;
     }
 
-    .btn-download:hover { background: #28a745; }
+    .btn-download:hover { opacity: .92; }
+    .btn-download:active { transform: scale(0.97); }
 
     .btn-secondary {
       display: block;
@@ -232,13 +279,15 @@
       border: none;
       font-size: 16px;
       cursor: pointer;
+      transition: opacity .15s;
     }
+    .btn-secondary:active { opacity: .6; }
 
     /* ---- Error ---- */
     .error-box {
       display: none;
-      background: #fdecea;
-      border: 1px solid #f5c6cb;
+      background: rgba(255,59,48,0.10);
+      border: 1px solid rgba(255,59,48,0.25);
       border-radius: var(--radius);
       padding: 14px 16px;
       margin-bottom: 16px;
@@ -249,13 +298,17 @@
     /* ---- Warning ---- */
     .warn-box {
       display: none;
-      background: #fff8e1;
-      border: 1px solid #ffe082;
+      background: rgba(255,204,0,0.12);
+      border: 1px solid rgba(255,204,0,0.35);
       border-radius: var(--radius);
       padding: 12px 16px;
       margin-bottom: 16px;
       font-size: 13px;
       color: #7c5700;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .warn-box { color: #ffd60a; }
     }
 
     /* ---- Footer ---- */
