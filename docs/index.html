@@ -269,26 +269,12 @@
     .conf-badge .badge-val { color: var(--d-lime); }
     .bento-middle { display: flex; gap: 10px; align-items: flex-start; }
     .bento-left { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-    .progress-ring { width: 150px; height: 150px; margin: 0 auto; display: block; }
-    .ring-bg { fill: none; stroke: var(--d-border); stroke-width: 7; }
-    .ring-fill {
-      fill: none;
-      stroke: url(#ring-grad);
-      stroke-width: 7;
-      stroke-linecap: round;
-      transform-origin: 100px 100px;
-      transform: rotate(-90deg);
-      stroke-dasharray: 502.655;
-      stroke-dashoffset: 502.655;
-      transition: stroke-dashoffset 0.4s ease;
+    .yoshi-wrap { width: 100%; }
+    #yoshi-canvas {
+      display: block; width: 100%; height: 120px;
+      border-radius: 6px; border: 2px solid var(--d-border);
+      background: #6ab5f0; image-rendering: pixelated;
     }
-    .ring-pct-text {
-      font-size: 28px;
-      font-weight: 700;
-      fill: var(--d-text);
-      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-    }
-    .ring-sublabel { font-size: 8px; fill: var(--d-muted); letter-spacing: 0.07em; }
     .log-panel {
       background: var(--d-tile);
       border: 1px solid var(--d-border);
@@ -514,21 +500,14 @@
           </div>
         </div>
 
-        <!-- Row 2: Ring + log | page preview -->
+        <!-- Row 2: Yoshi runner -->
+        <div class="yoshi-wrap">
+          <canvas id="yoshi-canvas"></canvas>
+        </div>
+
+        <!-- Row 3: Log + preview -->
         <div class="bento-middle">
           <div class="bento-left">
-            <svg class="progress-ring" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <linearGradient id="ring-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stop-color="#fbd000"/>
-                  <stop offset="100%" stop-color="#e52521"/>
-                </linearGradient>
-              </defs>
-              <circle class="ring-bg" cx="100" cy="100" r="80"/>
-              <circle class="ring-fill" id="ring-fill" cx="100" cy="100" r="80"/>
-              <text class="ring-pct-text" id="ring-pct-text" x="100" y="96" text-anchor="middle" dominant-baseline="middle">0%</text>
-              <text class="ring-sublabel" id="ring-sublabel" x="100" y="118" text-anchor="middle">INITIALIZING</text>
-            </svg>
             <div class="log-panel" id="log-panel"></div>
           </div>
           <div class="bento-right">
@@ -649,15 +628,8 @@
       }
       const pp = document.getElementById('progress-pct');
       if (pp) pp.textContent = pct > 0 ? pct + '%' : '';
-      // Update bento ring
-      const circumference = 502.655;
-      const ringEl = document.getElementById('ring-fill');
-      if (ringEl) ringEl.style.strokeDashoffset = circumference * (1 - pct / 100);
-      const pctText = document.getElementById('ring-pct-text');
-      if (pctText) pctText.textContent = pct + '%';
-      const sub = document.getElementById('ring-sublabel');
-      if (sub && message) sub.textContent = message.length > 22 ? message.slice(0, 22) + '…' : message;
-      // Update Mario puzzle
+      // Update Yoshi runner + puzzle
+      setYoshiProgress(pct);
       updatePuzzleCanvas(pct);
     }
 
@@ -785,6 +757,241 @@
       }
     }
 
+    // ─── Yoshi runner ────────────────────────────────────────────────────────
+    let yoshiRafId = null;
+    let yoshiPct = 0;
+    let yoshiJumping = false, yoshiJumpT = 0;
+    let yoshiTongueOut = false, yoshiTongueT = 0;
+    let yoshiRunFrame = 0, yoshiRunTimer = 0;
+    let yoshiObjects = [];
+    let yoshiW = 400, yoshiH = 120;
+    let yoshiTouchStart = null;
+    let yoshiKeyHandler = null;
+
+    function setYoshiProgress(pct) { yoshiPct = pct; }
+
+    function drawBgHills(ctx, W, H, scroll) {
+      ctx.fillStyle = '#4db838';
+      [0, 130, 270, 410, 550, 690, 830].forEach(x => {
+        const sx = ((x - scroll % (W + 260)) + W + 260) % (W + 260) - 130;
+        ctx.beginPath(); ctx.ellipse(sx, H - 20, 75, 42, 0, Math.PI, 0); ctx.fill();
+      });
+    }
+
+    function drawGround(ctx, W, H, scroll) {
+      const GY = H - 20;
+      ctx.fillStyle = '#3ea820'; ctx.fillRect(0, GY - 4, W, 5);
+      ctx.fillStyle = '#c88820'; ctx.fillRect(0, GY, W, H - GY);
+      ctx.fillStyle = '#8c5800'; ctx.fillRect(0, GY, W, 1);
+      const bW = 20;
+      for (let x = -(scroll % bW); x < W; x += bW) { ctx.fillRect(x, GY, 1, H - GY); }
+    }
+
+    function drawFruitOnBush(ctx, x, H) {
+      const gy = H - 24;
+      ctx.fillStyle = '#2ea810';
+      ctx.beginPath(); ctx.ellipse(x, gy - 8, 14, 11, 0, Math.PI, 0); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(x + 11, gy - 6, 11, 9, 0, Math.PI, 0); ctx.fill();
+      ctx.fillStyle = '#e83010';
+      ctx.beginPath(); ctx.arc(x + 5, gy - 17, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ff7060';
+      ctx.beginPath(); ctx.arc(x + 3, gy - 19, 2, 0, Math.PI * 2); ctx.fill();
+    }
+
+    function drawCoin(ctx, x, y, spin) {
+      const w = 4 + Math.abs(Math.sin(spin)) * 3;
+      ctx.fillStyle = '#fbd000';
+      ctx.beginPath(); ctx.ellipse(x, y, w, 8, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#c8a000';
+      ctx.beginPath(); ctx.ellipse(x, y, Math.max(1, w - 2), 5, 0, 0, Math.PI * 2); ctx.fill();
+    }
+
+    function drawYoshiMario(ctx, x, y, frame, jumpT) {
+      const jumpOff = yoshiJumping ? -Math.sin(jumpT * Math.PI) * 26 : 0;
+      const fy = y + jumpOff;
+
+      // Yoshi tail
+      ctx.fillStyle = '#3eca18';
+      ctx.beginPath(); ctx.arc(x - 5, fy + 10, 6, 0, Math.PI * 2); ctx.fill();
+
+      // Yoshi body
+      ctx.fillStyle = '#3eca18';
+      ctx.beginPath(); ctx.ellipse(x + 7, fy + 12, 13, 11, 0, 0, Math.PI * 2); ctx.fill();
+
+      // Yoshi belly
+      ctx.fillStyle = '#e8e8a8';
+      ctx.beginPath(); ctx.ellipse(x + 8, fy + 13, 8, 8, 0, 0, Math.PI * 2); ctx.fill();
+
+      // Yoshi head
+      ctx.fillStyle = '#3eca18';
+      ctx.beginPath(); ctx.ellipse(x + 18, fy + 5, 10, 9, 0.15, 0, Math.PI * 2); ctx.fill();
+
+      // Yoshi eye white
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(x + 22, fy + 3, 3.5, 0, Math.PI * 2); ctx.fill();
+      // Yoshi pupil
+      ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.arc(x + 23, fy + 3, 1.8, 0, Math.PI * 2); ctx.fill();
+
+      // Yoshi nose
+      ctx.fillStyle = '#f07030';
+      ctx.beginPath(); ctx.ellipse(x + 27, fy + 7, 4, 3, 0, 0, Math.PI * 2); ctx.fill();
+
+      // Yoshi feet (animated)
+      ctx.fillStyle = '#f07030';
+      if (frame === 0) {
+        ctx.fillRect(x + 1, fy + 21, 8, 5);
+        ctx.fillRect(x + 10, fy + 19, 8, 5);
+      } else {
+        ctx.fillRect(x + 3, fy + 20, 8, 5);
+        ctx.fillRect(x + 12, fy + 21, 8, 5);
+      }
+
+      // Mario body (blue overalls)
+      const mx = x + 4, my = fy - 4;
+      ctx.fillStyle = '#2038ec'; ctx.fillRect(mx + 2, my + 12, 10, 8);
+      // Mario shirt
+      ctx.fillStyle = '#e52521'; ctx.fillRect(mx + 1, my + 7, 12, 6);
+      // Mario face
+      ctx.fillStyle = '#fcbcb0'; ctx.fillRect(mx + 3, my + 2, 8, 6);
+      // Mario cap
+      ctx.fillStyle = '#e52521'; ctx.fillRect(mx + 2, my - 1, 10, 4);
+      ctx.fillRect(mx, my + 2, 13, 2);
+      // Cap band
+      ctx.fillStyle = '#fff'; ctx.fillRect(mx + 3, my, 5, 2);
+    }
+
+    function initYoshi() {
+      const canvas = document.getElementById('yoshi-canvas');
+      if (!canvas) return;
+      const dpr = window.devicePixelRatio || 1;
+      yoshiW = canvas.offsetWidth || 400;
+      yoshiH = 120;
+      canvas.width = Math.round(yoshiW * dpr);
+      canvas.height = Math.round(yoshiH * dpr);
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      const W = yoshiW, H = yoshiH;
+
+      yoshiObjects = [
+        ...[80, 200, 320, 440, 560, 680, 800, 920].map((wx, i) =>
+          ({ type: 'fruit', wx, eaten: false, id: i })),
+        ...[140, 280, 420, 560, 700, 840].map((wx, i) =>
+          ({ type: 'coin', wx, collected: false, spin: i * 1.2, id: 100 + i })),
+      ];
+
+      yoshiPct = 0; yoshiJumping = false; yoshiJumpT = 0;
+      yoshiTongueOut = false; yoshiTongueT = 0;
+      yoshiRunFrame = 0; yoshiRunTimer = 0;
+
+      let last = 0;
+      function loop(ts) {
+        const dt = Math.min((ts - last) / 1000, 0.05);
+        last = ts;
+        yoshiRunTimer += dt;
+        if (yoshiRunTimer > 0.13) { yoshiRunFrame = (yoshiRunFrame + 1) % 2; yoshiRunTimer = 0; }
+        if (yoshiJumping) { yoshiJumpT = Math.min(1, yoshiJumpT + dt * 2.4); if (yoshiJumpT >= 1) yoshiJumping = false; }
+        if (yoshiTongueOut) { yoshiTongueT = Math.min(1, yoshiTongueT + dt * 5); if (yoshiTongueT >= 1) yoshiTongueOut = false; }
+        yoshiObjects.forEach(o => { if (o.type === 'coin') o.spin += dt * 3; });
+
+        const worldOff = (yoshiPct / 100) * 920;
+        const mX = W * 0.27;
+        const groundY = H - 24;
+
+        ctx.clearRect(0, 0, W, H);
+        // Sky
+        ctx.fillStyle = '#6ab5f0'; ctx.fillRect(0, 0, W, H);
+        // Clouds (very simple, slow scroll)
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        [50, 200, 370, 520, 680].forEach(cx => {
+          const sx = ((cx - worldOff * 0.08) % (W + 100) + W + 100) % (W + 100) - 50;
+          ctx.beginPath(); ctx.arc(sx, 22, 10, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.arc(sx+13, 18, 12, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.arc(sx+26, 22, 9, 0, Math.PI*2); ctx.fill();
+          ctx.fillRect(sx-10, 22, 46, 10);
+        });
+        drawBgHills(ctx, W, H, worldOff * 0.18);
+        drawGround(ctx, W, H, worldOff);
+
+        // Objects
+        yoshiObjects.forEach(obj => {
+          const sx = obj.wx - worldOff + mX;
+          if (sx < -40 || sx > W + 40) return;
+          if (obj.type === 'fruit' && !obj.eaten) drawFruitOnBush(ctx, sx, H);
+          else if (obj.type === 'coin' && !obj.collected) drawCoin(ctx, sx, groundY - 18, obj.spin);
+        });
+
+        // Mario+Yoshi
+        drawYoshiMario(ctx, mX - 14, groundY - 4, yoshiRunFrame, yoshiJumpT);
+
+        // Tongue
+        if (yoshiTongueOut) {
+          const tLen = Math.sin(yoshiTongueT * Math.PI) * 38;
+          const jumpOff = yoshiJumping ? -Math.sin(yoshiJumpT * Math.PI) * 26 : 0;
+          ctx.fillStyle = '#ff5050';
+          ctx.fillRect(mX + 14, groundY - 16 + jumpOff, tLen, 3);
+          ctx.fillStyle = '#ff2020';
+          ctx.beginPath(); ctx.arc(mX + 14 + tLen, groundY - 14 + jumpOff, 4, 0, Math.PI*2); ctx.fill();
+        }
+
+        // % label
+        ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(W - 54, 4, 50, 15);
+        ctx.fillStyle = '#fbd000';
+        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.textAlign = 'right';
+        ctx.fillText(Math.round(yoshiPct) + '%', W - 6, 15);
+        ctx.textAlign = 'left';
+
+        yoshiRafId = requestAnimationFrame(loop);
+      }
+      yoshiRafId = requestAnimationFrame(ts => { last = ts; yoshiRafId = requestAnimationFrame(loop); });
+
+      function doTap() {
+        yoshiTongueOut = true; yoshiTongueT = 0;
+        const worldOff = (yoshiPct / 100) * 920;
+        const mX = yoshiW * 0.27;
+        yoshiObjects.forEach(obj => {
+          if (obj.type !== 'fruit' || obj.eaten) return;
+          const sx = obj.wx - worldOff + mX;
+          if (sx > mX + 10 && sx < mX + 60) obj.eaten = true;
+        });
+      }
+
+      function doJump() {
+        if (yoshiJumping) return;
+        yoshiJumping = true; yoshiJumpT = 0;
+        const worldOff = (yoshiPct / 100) * 920;
+        const mX = yoshiW * 0.27;
+        yoshiObjects.forEach(obj => {
+          if (obj.type !== 'coin' || obj.collected) return;
+          const sx = obj.wx - worldOff + mX;
+          if (sx > mX - 25 && sx < mX + 55) obj.collected = true;
+        });
+      }
+
+      canvas.addEventListener('click', doTap);
+      yoshiTouchStart = null;
+      canvas.addEventListener('touchstart', e => { yoshiTouchStart = e.touches[0]; e.preventDefault(); }, { passive: false });
+      canvas.addEventListener('touchend', e => {
+        if (!yoshiTouchStart) return;
+        const dy = yoshiTouchStart.clientY - e.changedTouches[0].clientY;
+        const dx = Math.abs(e.changedTouches[0].clientX - yoshiTouchStart.clientX);
+        yoshiTouchStart = null; e.preventDefault();
+        dy > 20 && dy > dx ? doJump() : doTap();
+      }, { passive: false });
+
+      yoshiKeyHandler = e => {
+        if (e.code === 'Space') { e.preventDefault(); doJump(); }
+        else if (e.code === 'KeyZ' || e.code === 'KeyX') doTap();
+      };
+      document.addEventListener('keydown', yoshiKeyHandler);
+    }
+
+    function stopYoshi() {
+      if (yoshiRafId) { cancelAnimationFrame(yoshiRafId); yoshiRafId = null; }
+      if (yoshiKeyHandler) { document.removeEventListener('keydown', yoshiKeyHandler); yoshiKeyHandler = null; }
+    }
+
     function initNeural() {
       if (!puzzleOffscreen) puzzleOffscreen = buildPuzzleOffscreen();
       puzzleOrder = Array.from({length: 100}, (_, i) => i);
@@ -793,7 +1000,8 @@
         [puzzleOrder[i], puzzleOrder[j]] = [puzzleOrder[j], puzzleOrder[i]];
       }
       updatePuzzleCanvas(0);
-      neuralHandle = { stop() {} };
+      initYoshi();
+      neuralHandle = { stop() { stopYoshi(); } };
     }
 
     function stopNeural() {
