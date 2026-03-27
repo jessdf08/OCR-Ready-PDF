@@ -6,40 +6,27 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <title>OCR PDF Converter</title>
 
   <style>
     :root {
-      --accent: #0071e3;
-      --accent-dark: #0051a3;
-      --error: #c0392b;
-      --bg: #f5f5f7;
-      --card: rgba(255,255,255,0.72);
-      --text: #1d1d1f;
-      --muted: #6e6e73;
-      --border: #d2d2d7;
-      --radius: 16px;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --accent: #2997ff;
-        --accent-dark: #0071e3;
-        --error: #ff453a;
-        --bg: #000000;
-        --card: rgba(28,28,30,0.80);
-        --text: #f5f5f7;
-        --muted: #8e8e93;
-        --border: #38383a;
-      }
+      --accent: #e52521;
+      --accent-dark: #b81c18;
+      --error: #e52521;
+      --bg: #5c94fc;
+      --card: #1a0d00;
+      --text: #fbd000;
+      --muted: #fcbcb0;
+      --border: #5c3300;
+      --radius: 4px;
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: linear-gradient(160deg, #dce8fd 0%, #f5f5f7 45%, #f8e4f5 100%);
+      background: linear-gradient(180deg, #5c94fc 0%, #3d78e8 100%);
       background-attachment: fixed;
       color: var(--text);
       min-height: 100vh;
@@ -49,50 +36,41 @@
               max(16px, env(safe-area-inset-left));
     }
 
-    @media (prefers-color-scheme: dark) {
-      body {
-        background: linear-gradient(160deg, #0a1628 0%, #1c1c1e 45%, #1a0a20 100%);
-        background-attachment: fixed;
-      }
-    }
-
     .card {
       background: var(--card);
-      backdrop-filter: blur(24px) saturate(180%);
-      -webkit-backdrop-filter: blur(24px) saturate(180%);
-      border: 1px solid rgba(255,255,255,0.45);
+      border: 3px solid #fbd000;
+      box-shadow: 5px 5px 0 #000;
       border-radius: var(--radius);
       padding: 28px 24px;
       max-width: 480px;
       margin: 0 auto;
-      box-shadow: 0 8px 32px rgba(0,0,0,.12);
-    }
-
-    @media (prefers-color-scheme: dark) {
-      .card {
-        border-color: rgba(255,255,255,0.08);
-        box-shadow: 0 8px 32px rgba(0,0,0,.4);
-      }
     }
 
     h1 {
-      font-size: 26px;
-      font-weight: 700;
-      letter-spacing: -0.5px;
-      margin-bottom: 6px;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 14px;
+      font-weight: 400;
+      letter-spacing: 0;
+      color: #fbd000;
+      text-shadow: 2px 2px 0 #000;
+      margin-bottom: 12px;
+      line-height: 1.6;
     }
 
     .subtitle {
-      font-size: 14px;
-      color: var(--muted);
+      font-family: 'Press Start 2P', monospace;
+      font-size: 9px;
+      color: #fcbcb0;
       margin-bottom: 24px;
+      line-height: 1.8;
     }
 
     /* ---- Mode toggle ---- */
     .mode-toggle {
       display: flex;
-      background: rgba(120,120,128,0.12);
-      border-radius: 10px;
+      background: rgba(0,0,0,0.45);
+      border: 2px solid #5c3300;
+      border-radius: var(--radius);
       padding: 3px;
       gap: 3px;
       margin-bottom: 24px;
@@ -103,20 +81,21 @@
       min-height: 44px;
       padding: 10px 8px;
       border: none;
-      border-radius: 8px;
+      border-radius: 2px;
       background: transparent;
-      font-size: 16px;
-      font-weight: 500;
-      color: var(--muted);
+      font-family: 'Press Start 2P', monospace;
+      font-size: 9px;
+      font-weight: 400;
+      color: #fcbcb0;
       cursor: pointer;
-      transition: background .2s, color .2s, box-shadow .2s;
+      transition: background .15s, color .15s, box-shadow .15s;
+      line-height: 1.6;
     }
 
     .mode-toggle button.active {
-      background: var(--card);
-      color: var(--text);
-      font-weight: 600;
-      box-shadow: 0 2px 8px rgba(0,0,0,.14);
+      background: #e52521;
+      color: #fff;
+      box-shadow: 2px 2px 0 #000;
     }
 
     /* ---- File picker ---- */
@@ -136,28 +115,31 @@
       width: 100%;
       min-height: 64px;
       padding: 16px;
-      border: 1.5px solid var(--border);
+      border: 3px solid #fbd000;
       border-radius: var(--radius);
-      font-size: 16px;
-      color: var(--accent);
+      font-family: 'Press Start 2P', monospace;
+      font-size: 9px;
+      color: #fbd000;
       cursor: pointer;
-      transition: border-color .15s, background .15s, transform .2s cubic-bezier(0.34,1.56,0.64,1), box-shadow .15s;
+      background: rgba(0,0,0,0.35);
+      transition: background .15s, box-shadow .15s;
       text-align: center;
+      line-height: 1.8;
     }
 
     .file-label:hover, .file-label:focus-within {
-      border-color: var(--accent);
-      background: rgba(0,113,227,0.05);
-      transform: translateY(-1px);
-      box-shadow: 0 4px 16px rgba(0,113,227,.12);
+      background: rgba(251,208,0,0.08);
+      box-shadow: 0 0 0 2px #fbd000, 3px 3px 0 #000;
     }
 
     .file-name {
-      font-size: 13px;
-      color: var(--muted);
+      font-family: 'Press Start 2P', monospace;
+      font-size: 8px;
+      color: #fcbcb0;
       margin-top: 8px;
       text-align: center;
       word-break: break-all;
+      line-height: 1.6;
     }
 
     /* ---- Primary button ---- */
@@ -166,14 +148,17 @@
       width: 100%;
       min-height: 52px;
       padding: 14px;
-      background: linear-gradient(135deg, #0071e3 0%, #0051a3 100%);
+      background: #e52521;
       color: #fff;
-      border: none;
+      border: 3px solid #000;
       border-radius: var(--radius);
-      font-size: 17px;
-      font-weight: 600;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 11px;
+      font-weight: 400;
       cursor: pointer;
-      transition: opacity .15s, transform .1s;
+      box-shadow: 4px 4px 0 #000;
+      transition: box-shadow .1s, transform .1s;
+      line-height: 1.5;
     }
 
     .btn-primary:disabled {
@@ -181,8 +166,8 @@
       cursor: not-allowed;
     }
 
-    .btn-primary:not(:disabled):hover { opacity: .92; }
-    .btn-primary:not(:disabled):active { transform: scale(0.97); }
+    .btn-primary:not(:disabled):hover { background: #b81c18; }
+    .btn-primary:not(:disabled):active { box-shadow: 1px 1px 0 #000; transform: translate(3px, 3px); }
 
     /* ---- Status section ---- */
     .status-text {
@@ -233,21 +218,21 @@
       margin: -28px -24px;
     }
     .bento-grid {
-      --d-bg: #0d1117;
-      --d-tile: #161b22;
-      --d-border: #30363d;
-      --d-text: #e6edf3;
-      --d-muted: #7d8590;
-      --d-blue: #58a6ff;
-      --d-lime: #7ee787;
-      --d-orange: #ff9f0a;
+      --d-bg: #060320;
+      --d-tile: #0d0a2e;
+      --d-border: #1a1060;
+      --d-text: #fbd000;
+      --d-muted: #fcbcb0;
+      --d-blue: #5c94fc;
+      --d-lime: #52d000;
+      --d-orange: #e52521;
       background: var(--d-bg);
       border-radius: var(--radius);
       padding: 16px 14px;
       display: flex;
       flex-direction: column;
       gap: 10px;
-      font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+      font-family: 'Press Start 2P', 'JetBrains Mono', monospace;
     }
     .bento-header {
       display: flex;
@@ -347,7 +332,7 @@
     }
     .viz-title { font-size: 8.5px; letter-spacing: 0.07em; color: var(--d-text); text-transform: uppercase; margin-bottom: 2px; }
     .viz-sub { font-size: 8px; color: var(--d-muted); margin-bottom: 8px; }
-    #neural-canvas { display: block; width: 100%; height: 140px; border-radius: 4px; background: var(--d-bg); }
+    #puzzle-canvas { display: block; width: 100%; border-radius: 2px; border: 2px solid var(--d-border); image-rendering: pixelated; }
     .bento-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 2px; }
     .wasm-badge { font-size: 9px; letter-spacing: 0.06em; color: var(--d-muted); text-transform: uppercase; }
     #status-section .status-note { font-size: 9px; color: var(--d-muted); text-align: right; margin: 0; }
@@ -359,19 +344,23 @@
       width: 100%;
       min-height: 52px;
       padding: 14px;
-      background: linear-gradient(135deg, #34c759 0%, #1e9e3e 100%);
-      color: #fff;
+      background: #fbd000;
+      color: #000;
+      border: 3px solid #000;
       border-radius: var(--radius);
-      font-size: 17px;
-      font-weight: 600;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 11px;
+      font-weight: 400;
       text-align: center;
       text-decoration: none;
       margin-bottom: 16px;
-      transition: opacity .15s, transform .1s;
+      box-shadow: 4px 4px 0 #000;
+      transition: box-shadow .1s, transform .1s;
+      line-height: 1.5;
     }
 
-    .btn-download:hover { opacity: .92; }
-    .btn-download:active { transform: scale(0.97); }
+    .btn-download:hover { background: #e5c000; }
+    .btn-download:active { box-shadow: 1px 1px 0 #000; transform: translate(3px, 3px); }
 
     .btn-secondary {
       display: block;
@@ -379,11 +368,13 @@
       min-height: 44px;
       padding: 10px;
       background: transparent;
-      color: var(--accent);
+      color: #5c94fc;
       border: none;
-      font-size: 16px;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 9px;
       cursor: pointer;
       transition: opacity .15s;
+      line-height: 1.6;
     }
     .btn-secondary:active { opacity: .6; }
 
@@ -417,17 +408,49 @@
 
     /* ---- Footer ---- */
     .footer-note {
-      font-size: 12px;
-      color: var(--muted);
+      font-family: 'Press Start 2P', monospace;
+      font-size: 8px;
+      color: #fcbcb0;
       text-align: center;
       margin-top: 20px;
+      line-height: 1.8;
+    }
+    /* ---- Course clear (done screen) ---- */
+    .course-clear-title {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 20px;
+      color: #fbd000;
+      text-shadow: 3px 3px 0 #000;
+      text-align: center;
+      line-height: 1.5;
+      margin-bottom: 14px;
+    }
+    #complete-canvas {
+      display: block;
+      width: 100%;
+      border: 3px solid #fbd000;
+      box-shadow: 4px 4px 0 #000;
+      border-radius: var(--radius);
+      margin-bottom: 12px;
+      image-rendering: pixelated;
+    }
+    .course-stats {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 9px;
+      color: #fcbcb0;
+      margin-bottom: 20px;
+      line-height: 1.6;
+      flex-wrap: wrap;
     }
   </style>
 </head>
 <body>
   <div class="card">
-    <h1 id="app-heading">OCR PDF Converter</h1>
-    <p class="subtitle" id="app-subtitle">Turn photos or scanned PDFs into searchable PDFs — right in your browser.</p>
+    <h1 id="app-heading">OCR PDF<br>CONVERTER</h1>
+    <p class="subtitle" id="app-subtitle">Make your docs searchable &#9733; right in your browser</p>
 
     <!-- Error banner -->
     <div class="error-box" id="error-box"></div>
@@ -439,10 +462,10 @@
     <div id="upload-section">
       <div class="mode-toggle">
         <button type="button" id="btn-mode-images" class="active" onclick="setMode('images')">
-          Photos / Images
+          &#9829; IMAGES
         </button>
         <button type="button" id="btn-mode-pdf" onclick="setMode('pdf')">
-          PDF File
+          &#9830; PDF
         </button>
       </div>
 
@@ -450,7 +473,7 @@
         <!-- Images input (shown in images mode) -->
         <div id="picker-images">
           <label class="file-label" for="input-images">
-            <span>&#128444;</span> Choose photos or images
+            &#10022; CHOOSE IMAGES
           </label>
           <input type="file" id="input-images"
                  accept="image/*" multiple
@@ -461,7 +484,7 @@
         <!-- PDF input (shown in pdf mode) -->
         <div id="picker-pdf" style="display:none">
           <label class="file-label" for="input-pdf">
-            <span>&#128196;</span> Choose a PDF file
+            &#10022; CHOOSE PDF
           </label>
           <input type="file" id="input-pdf"
                  accept="application/pdf,.pdf"
@@ -471,7 +494,7 @@
       </div>
 
       <button class="btn-primary" id="btn-convert" disabled onclick="startConversion()">
-        Convert to Searchable PDF
+        &#9654; START!
       </button>
     </div>
 
@@ -497,8 +520,8 @@
             <svg class="progress-ring" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
               <defs>
                 <linearGradient id="ring-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stop-color="#58a6ff"/>
-                  <stop offset="100%" stop-color="#7ee787"/>
+                  <stop offset="0%" stop-color="#fbd000"/>
+                  <stop offset="100%" stop-color="#e52521"/>
                 </linearGradient>
               </defs>
               <circle class="ring-bg" cx="100" cy="100" r="80"/>
@@ -517,11 +540,11 @@
           </div>
         </div>
 
-        <!-- Row 3: Neural lattice visualization -->
+        <!-- Row 3: Puzzle -->
         <div class="bento-viz">
-          <div class="viz-title">REAL-TIME NEURAL CHARACTER IDENTIFICATION: <span id="viz-page">PAGE 1</span></div>
-          <div class="viz-sub">Lattice Activation and Data Flow</div>
-          <canvas id="neural-canvas" width="400" height="140"></canvas>
+          <div class="viz-title">&#9733; WORLD 1-1 &#9733; &mdash; <span id="viz-page">PAGE 1</span></div>
+          <div class="viz-sub">1 piece revealed per % complete</div>
+          <canvas id="puzzle-canvas" width="300" height="200"></canvas>
         </div>
 
         <!-- Row 4: Footer -->
@@ -543,13 +566,19 @@
 
     <!-- Done: download -->
     <div id="done-section" style="display:none">
+      <div class="course-clear-title">COURSE<br>CLEAR!</div>
+      <canvas id="complete-canvas" width="300" height="200"></canvas>
+      <div class="course-stats">
+        <span>PAGES: <span id="done-pages">0</span></span>
+        <span>CONF: <span id="done-conf">&#8212;</span></span>
+      </div>
       <a class="btn-download" id="download-link" href="#">
-        &#8681; Download Searchable PDF
+        &#9733; Download Searchable PDF
       </a>
-      <p class="status-note" style="margin-bottom:16px">
-        On iPhone: tap above, then use the share sheet to save to Files.
+      <p class="status-note" style="margin-bottom:16px; font-family: 'Press Start 2P', monospace; font-size: 8px; line-height: 1.8; color: #fcbcb0;">
+        On iPhone: tap above, then share sheet &#8594; save to Files.
       </p>
-      <button class="btn-secondary" onclick="resetApp()">Convert another file</button>
+      <button class="btn-secondary" onclick="resetApp()">&#9654; PLAY AGAIN</button>
     </div>
 
     <p class="footer-note" id="app-footer">All processing happens in your browser &middot; No files are uploaded</p>
@@ -628,107 +657,143 @@
       if (pctText) pctText.textContent = pct + '%';
       const sub = document.getElementById('ring-sublabel');
       if (sub && message) sub.textContent = message.length > 22 ? message.slice(0, 22) + '…' : message;
+      // Update Mario puzzle
+      updatePuzzleCanvas(pct);
     }
 
-    // ─── Neural lattice animation ─────────────────────────────────────────────
+    // ─── Mario puzzle ─────────────────────────────────────────────────────────
     let neuralHandle = null;
     let totalPagesProcessed = 0;
     let totalConfidenceSum = 0;
     let confidenceCount = 0;
+    let puzzleOffscreen = null;
+    let puzzleOrder = null;
 
-    function initNeural() {
-      const canvas = document.getElementById('neural-canvas');
-      if (!canvas || neuralHandle) return;
-      const ctx = canvas.getContext('2d');
-      // Match canvas pixel dimensions to its CSS size
-      const rect = canvas.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      const CW = (rect.width || 400);
-      const CH = (rect.height || 140);
-      canvas.width = Math.round(CW * dpr);
-      canvas.height = Math.round(CH * dpr);
-      ctx.scale(dpr, dpr);
-
-      const N = 110;
-      const particles = Array.from({ length: N }, () => ({
-        x: (Math.random() - 0.5) * 260,
-        y: (Math.random() - 0.5) * 110,
-        z: (Math.random() - 0.5) * 260,
-        pulse: Math.random() * Math.PI * 2,
-        pulseSpeed: 0.012 + Math.random() * 0.022,
-        lime: Math.random() > 0.62,
+    function drawMarioSprite(ctx, x, y) {
+      const S = 3;
+      const R = '#e52521', K = '#fcbcb0', B = '#2038ec', D = '#8c5800', _ = null;
+      const sprite = [
+        [_,_,R,R,R,_,_,_],
+        [_,R,R,R,R,R,R,_],
+        [_,D,K,D,D,_,_,_],
+        [D,K,K,K,K,D,_,_],
+        [D,K,K,K,K,D,_,_],
+        [_,B,R,B,B,_,_,_],
+        [B,B,B,B,B,B,_,_],
+        [D,D,_,_,D,D,_,_],
+      ];
+      sprite.forEach((row, r) => row.forEach((c2, c) => {
+        if (c2) { ctx.fillStyle = c2; ctx.fillRect(x + c * S, y + r * S, S, S); }
       }));
+    }
 
-      let angle = 0;
-      let rafId;
-
-      function project(x, y, z) {
-        const cos = Math.cos(angle), sin = Math.sin(angle);
-        const rx = x * cos - z * sin;
-        const rz = x * sin + z * cos;
-        const fov = 340;
-        const s = fov / (fov + rz);
-        return { sx: CW / 2 + rx * s * 0.88, sy: CH / 2 + (y - rz * 0.32) * s * 0.72, s, rz };
-      }
-
-      function draw() {
-        ctx.clearRect(0, 0, CW, CH);
-
-        angle += 0.004;
-
-        const pts = particles.map((p, i) => {
-          p.pulse += p.pulseSpeed;
-          const b = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(p.pulse));
-          return { ...project(p.x, p.y, p.z), b, lime: p.lime, i };
+    function drawMarioScene(ctx, W, H) {
+      const GY = H - 22;
+      // Sky
+      ctx.fillStyle = '#5c94fc';
+      ctx.fillRect(0, 0, W, H);
+      // Clouds
+      [[55,32],[140,22],[225,36]].forEach(([cx, cy]) => {
+        ctx.fillStyle = '#fcfcfc';
+        [[0,0,12],[13,-5,14],[26,0,11]].forEach(([dx,dy,r]) => {
+          ctx.beginPath(); ctx.arc(cx+dx, cy+dy, r, 0, Math.PI*2); ctx.fill();
         });
-        pts.sort((a, b2) => b2.rz - a.rz);
+        ctx.fillRect(cx-12, cy, 50, 12);
+        ctx.fillStyle = '#bcbcbc'; ctx.fillRect(cx-10, cy+10, 46, 3);
+        ctx.fillStyle = '#fcfcfc';
+      });
+      // Left hill
+      ctx.fillStyle = '#3ea820';
+      ctx.beginPath(); ctx.ellipse(52, GY+2, 52, 38, 0, Math.PI, 0); ctx.fill();
+      ctx.fillStyle = '#52d000';
+      ctx.beginPath(); ctx.ellipse(40, GY-15, 22, 16, 0, Math.PI, 0); ctx.fill();
+      // Ground
+      ctx.fillStyle = '#c88820'; ctx.fillRect(0, GY, W, H - GY);
+      ctx.fillStyle = '#8c5800'; ctx.fillRect(0, GY, W, 3);
+      for (let x = 0; x < W; x += 16) {
+        ctx.fillRect(x, GY, 1, H - GY);
+        ctx.fillRect(x, GY + 11, 16, 1);
+      }
+      // Flagpole
+      const FX = 170;
+      ctx.fillStyle = '#c8c8c8'; ctx.fillRect(FX, 20, 3, GY - 20);
+      ctx.beginPath(); ctx.arc(FX+1.5, 20, 5, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#52d000';
+      ctx.beginPath(); ctx.moveTo(FX+3,24); ctx.lineTo(FX+26,32); ctx.lineTo(FX+3,40); ctx.closePath(); ctx.fill();
+      // Castle
+      const CX = 202, CY = GY - 60;
+      ctx.fillStyle = '#bcbcbc';
+      [0,12,24,36,48,60].forEach(dx => ctx.fillRect(CX+dx, CY, 9, 12));
+      ctx.fillRect(CX, CY+12, 72, 48);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(CX+26, CY+28, 18, 32);
+      ctx.fillRect(CX+6, CY+18, 11, 10);
+      ctx.fillRect(CX+55, CY+18, 11, 10);
+      // Mario
+      drawMarioSprite(ctx, FX-22, GY-40);
+      // HUD
+      ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, W, 14);
+      ctx.fillStyle = '#fff'; ctx.font = '6px monospace'; ctx.textAlign = 'left';
+      ctx.fillText('MARIO  006250', 6, 10);
+      ctx.fillText('WORLD  1-1', 108, 10);
+      ctx.fillText('TIME  292', 222, 10);
+      ctx.textAlign = 'left';
+    }
 
-        // Connections
-        for (let i = 0; i < pts.length; i++) {
-          const pi = particles[pts[i].i];
-          for (let j = i + 1; j < pts.length; j++) {
-            const pj = particles[pts[j].i];
-            const dx = pi.x - pj.x, dy = pi.y - pj.y, dz = pi.z - pj.z;
-            const dist2 = dx * dx + dy * dy + dz * dz;
-            if (dist2 < 70 * 70) {
-              const alpha = (1 - Math.sqrt(dist2) / 70) * 0.16 * ((pts[i].b + pts[j].b) / 2);
-              ctx.strokeStyle = (pts[i].lime || pts[j].lime)
-                ? `rgba(126,231,135,${alpha})` : `rgba(88,166,255,${alpha})`;
-              ctx.lineWidth = 0.5;
-              ctx.beginPath();
-              ctx.moveTo(pts[i].sx, pts[i].sy);
-              ctx.lineTo(pts[j].sx, pts[j].sy);
-              ctx.stroke();
+    function buildPuzzleOffscreen() {
+      const W = 300, H = 200;
+      const c = document.createElement('canvas');
+      c.width = W; c.height = H;
+      drawMarioScene(c.getContext('2d'), W, H);
+      return c;
+    }
+
+    function updatePuzzleCanvas(pct) {
+      const canvas = document.getElementById('puzzle-canvas');
+      if (!canvas || !puzzleOffscreen || !puzzleOrder) return;
+      const ctx = canvas.getContext('2d');
+      const CW = canvas.width, CH = canvas.height;
+      const COLS = 10, ROWS = 10;
+      const PW = CW / COLS, PH = CH / ROWS;
+      const toReveal = Math.min(100, Math.floor(pct));
+      ctx.fillStyle = '#060320'; ctx.fillRect(0, 0, CW, CH);
+      const srcPW = puzzleOffscreen.width / COLS;
+      const srcPH = puzzleOffscreen.height / ROWS;
+      for (let k = 0; k < toReveal; k++) {
+        const idx = puzzleOrder[k];
+        const col = idx % COLS, row = Math.floor(idx / COLS);
+        ctx.drawImage(puzzleOffscreen, col*srcPW, row*srcPH, srcPW, srcPH, col*PW, row*PH, PW, PH);
+      }
+      const revealed = new Set(puzzleOrder.slice(0, toReveal));
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          if (!revealed.has(r * COLS + c)) {
+            ctx.fillStyle = 'rgba(6,3,32,0.88)';
+            ctx.fillRect(c*PW, r*PH, PW, PH);
+            ctx.strokeStyle = 'rgba(92,148,252,0.25)';
+            ctx.lineWidth = 0.5;
+            ctx.strokeRect(c*PW+0.5, r*PH+0.5, PW-1, PH-1);
+            if (PW > 20) {
+              ctx.fillStyle = 'rgba(251,208,0,0.18)';
+              ctx.font = Math.floor(PH * 0.45) + 'px monospace';
+              ctx.textAlign = 'center';
+              ctx.fillText('?', c*PW + PW/2, r*PH + PH*0.68);
+              ctx.textAlign = 'left';
             }
           }
         }
-
-        // Dots
-        for (const p of pts) {
-          const r = (0.7 + p.s * 1.4) * (0.6 + p.b * 0.7);
-          const col = p.lime
-            ? `rgba(126,231,135,${0.45 + p.b * 0.55})`
-            : `rgba(88,166,255,${0.35 + p.b * 0.65})`;
-          if (p.b > 0.76) {
-            const gr = ctx.createRadialGradient(p.sx, p.sy, 0, p.sx, p.sy, r * 5);
-            gr.addColorStop(0, p.lime ? 'rgba(126,231,135,0.22)' : 'rgba(88,166,255,0.18)');
-            gr.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.fillStyle = gr;
-            ctx.beginPath();
-            ctx.arc(p.sx, p.sy, r * 5, 0, Math.PI * 2);
-            ctx.fill();
-          }
-          ctx.fillStyle = col;
-          ctx.beginPath();
-          ctx.arc(p.sx, p.sy, r, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        rafId = requestAnimationFrame(draw);
       }
+    }
 
-      draw();
-      neuralHandle = { stop() { cancelAnimationFrame(rafId); } };
+    function initNeural() {
+      if (!puzzleOffscreen) puzzleOffscreen = buildPuzzleOffscreen();
+      puzzleOrder = Array.from({length: 100}, (_, i) => i);
+      for (let i = 99; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [puzzleOrder[i], puzzleOrder[j]] = [puzzleOrder[j], puzzleOrder[i]];
+      }
+      updatePuzzleCanvas(0);
+      neuralHandle = { stop() {} };
     }
 
     function stopNeural() {
@@ -824,6 +889,20 @@
     // ─── Download / reset ────────────────────────────────────────────────────
     function triggerDownload(pdfBytes, filename) {
       stopNeural();
+      // Draw completed puzzle on done screen
+      updatePuzzleCanvas(100);
+      const src = document.getElementById('puzzle-canvas');
+      const dst = document.getElementById('complete-canvas');
+      if (src && dst) {
+        const dCtx = dst.getContext('2d');
+        dCtx.drawImage(src, 0, 0, dst.width, dst.height);
+      }
+      // Populate done-screen stats
+      const dp = document.getElementById('done-pages');
+      const dc = document.getElementById('done-conf');
+      if (dp) dp.textContent = totalPagesProcessed;
+      if (dc) dc.textContent = confidenceCount > 0
+        ? Math.round(totalConfidenceSum / confidenceCount) + '%' : '—';
       if (lastDownloadUrl) URL.revokeObjectURL(lastDownloadUrl);
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       lastDownloadUrl = URL.createObjectURL(blob);
