@@ -536,7 +536,7 @@
     // ─── Mode toggle ─────────────────────────────────────────────────────────
     const MODE_HINTS = {
       images: 'Images → searchable PDF (OCR included)',
-      pack:   'Images → plain PDF, no OCR — use for large batches, then run PDF + OCR',
+      pack:   'Images → searchable PDF via 2-step pack then OCR — best for large batches',
       pdf:    'PDF → searchable PDF (OCR included)',
     };
 
@@ -585,8 +585,8 @@
       const dp = document.getElementById('done-pages');
       const dc = document.getElementById('done-conf');
       if (dp) dp.textContent = totalPagesProcessed;
-      if (dc) dc.textContent = currentMode === 'pack' ? 'N/A'
-        : confidenceCount > 0 ? Math.round(totalConfidenceSum / confidenceCount) + '%' : '—';
+      if (dc) dc.textContent = confidenceCount > 0
+        ? Math.round(totalConfidenceSum / confidenceCount) + '%' : '—';
       if (lastDownloadUrl) URL.revokeObjectURL(lastDownloadUrl);
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       lastDownloadUrl = URL.createObjectURL(blob);
@@ -970,8 +970,18 @@
           outputName = 'ocr-output.pdf';
           pdfBytes = await runImageMode(files);
         } else if (currentMode === 'pack') {
-          outputName = 'images-packed.pdf';
-          pdfBytes = await runPackMode(files);
+          // Step 1: pack images into a plain PDF
+          setProgress(0, 'Packing images…');
+          const packedBytes = await runPackMode(files);
+          // Step 2: run OCR on the packed PDF automatically
+          const packedBlob = new Blob([packedBytes], { type: 'application/pdf' });
+          totalPagesProcessed = 0; totalConfidenceSum = 0; confidenceCount = 0;
+          setProgress(0, 'Initializing OCR engine…');
+          addLog('Packing complete — starting OCR', 'sync');
+          document.getElementById('status-note').textContent = 'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.';
+          await new Promise(resolve => requestAnimationFrame(resolve));
+          outputName = 'images-ocr.pdf';
+          pdfBytes = await runPdfMode(packedBlob);
         } else {
           outputName = files[0].name.replace(/\.pdf$/i, '') + '-ocr.pdf';
           pdfBytes = await runPdfMode(files[0]);
