@@ -843,6 +843,8 @@
       setProgress(0, 'Initializing OCR engine…');
       addLog('Initializing OCR engine', 'sync');
       document.getElementById('status-note').textContent = 'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.';
+      // Yield to browser so it repaints the status screen before heavy work begins
+      await new Promise(resolve => requestAnimationFrame(resolve));
 
       try {
         const outputName = currentMode === 'pdf'
