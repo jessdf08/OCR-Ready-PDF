@@ -314,19 +314,13 @@
     <!-- Upload form -->
     <div id="upload-section">
       <div class="mode-toggle">
-        <button type="button" id="btn-mode-images" class="active" onclick="setMode('images')">Images + OCR</button>
-        <button type="button" id="btn-mode-pack" onclick="setMode('pack')">Pack Images</button>
-        <button type="button" id="btn-mode-pdf" onclick="setMode('pdf')">PDF + OCR</button>
+        <button type="button" id="btn-mode-pack" class="active" onclick="setMode('pack')">Images → OCR</button>
+        <button type="button" id="btn-mode-pdf" onclick="setMode('pdf')">PDF → OCR</button>
       </div>
-      <p class="mode-hint" id="mode-hint">Images → searchable PDF</p>
+      <p class="mode-hint" id="mode-hint">Images → searchable PDF via 2-step pack then OCR — best for large batches</p>
 
       <div class="file-area">
-        <div id="picker-images">
-          <label class="file-label" for="input-images">Choose images</label>
-          <input type="file" id="input-images" accept="image/*" multiple onchange="onFilesChosen(this)">
-          <div class="file-name" id="name-images"></div>
-        </div>
-        <div id="picker-pack" style="display:none">
+        <div id="picker-pack">
           <label class="file-label" for="input-pack">Choose images</label>
           <input type="file" id="input-pack" accept="image/*" multiple onchange="onFilesChosen(this)">
           <div class="file-name" id="name-pack"></div>
@@ -400,7 +394,7 @@
       'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 
     // ─── State ───────────────────────────────────────────────────────────────
-    let currentMode = 'images';
+    let currentMode = 'pack';
     let lastDownloadUrl = null;
     let _wakeLock = null;
     let _bgAudio = null;
@@ -535,20 +529,17 @@
 
     // ─── Mode toggle ─────────────────────────────────────────────────────────
     const MODE_HINTS = {
-      images: 'Images → searchable PDF (OCR included)',
-      pack:   'Images → searchable PDF via 2-step pack then OCR — best for large batches',
-      pdf:    'PDF → searchable PDF (OCR included)',
+      pack: 'Images → searchable PDF via 2-step pack then OCR — best for large batches',
+      pdf:  'PDF → searchable PDF (OCR included)',
     };
 
     function setMode(mode) {
       currentMode = mode;
-      document.getElementById('picker-images').style.display = mode === 'images' ? '' : 'none';
-      document.getElementById('picker-pack').style.display   = mode === 'pack'   ? '' : 'none';
-      document.getElementById('picker-pdf').style.display    = mode === 'pdf'    ? '' : 'none';
-      document.getElementById('btn-mode-images').classList.toggle('active', mode === 'images');
-      document.getElementById('btn-mode-pack').classList.toggle('active',   mode === 'pack');
-      document.getElementById('btn-mode-pdf').classList.toggle('active',    mode === 'pdf');
-      ['images', 'pack', 'pdf'].forEach(m => {
+      document.getElementById('picker-pack').style.display = mode === 'pack' ? '' : 'none';
+      document.getElementById('picker-pdf').style.display  = mode === 'pdf'  ? '' : 'none';
+      document.getElementById('btn-mode-pack').classList.toggle('active', mode === 'pack');
+      document.getElementById('btn-mode-pdf').classList.toggle('active',  mode === 'pdf');
+      ['pack', 'pdf'].forEach(m => {
         if (m !== mode) {
           document.getElementById('input-' + m).value = '';
           document.getElementById('name-' + m).textContent = '';
@@ -677,102 +668,6 @@
           color: PDFLib.rgb(0, 0, 0),
           opacity: 0,
         });
-      }
-    }
-
-    // ─── Image mode pipeline ─────────────────────────────────────────────────
-    async function runImageMode(files, onProgress) {
-      const TARGET_BYTES = 90 * 1024 * 1024; // 90 MB image budget
-      const { PDFDocument } = PDFLib;
-      const total = files.length;
-      let currentPage = 0;
-
-      const worker = await Tesseract.createWorker('eng', 1, {
-        logger: m => {
-          if (m.status === 'recognizing text') {
-            // OCR occupies 0–70% of the bar; each page gets an equal slice
-            const pageBase = (currentPage / total) * 70;
-            const pageSlice = (1 / total) * 70;
-            const pct = pageBase + pageSlice * (0.1 + m.progress * 0.8);
-            setProgress(pct, 'OCR — page ' + (currentPage + 1) + ' of ' + total + '…');
-          }
-        }
-      });
-
-      try {
-        const SAMPLE_SIZE = Math.min(5, total);
-        let quality = 1.0;
-        const pages = [];
-
-        // Helper: process one image through OCR and JPEG encode
-        async function processImage(i, q) {
-          currentPage = i;
-          const pageBase = (i / total) * 70;
-          const pageSlice = (1 / total) * 70;
-          setProgress(pageBase, 'Loading image ' + (i + 1) + ' of ' + total + '…');
-          document.getElementById('status-note').textContent = total > 1 ? 'Page ' + (i + 1) + ' of ' + total : '';
-
-          const img = await fileToImage(files[i]);
-          const canvas = imageToCanvas(img, 2400);
-          URL.revokeObjectURL(img._objectURL);
-
-          const { data } = await worker.recognize(canvas);
-          const words = (data.words || []).filter(w => w.text && w.text.trim());
-          const confidence = Math.round(data.confidence || 0);
-          setPagePreview(canvas, i + 1, total);
-          updateStats(i + 1, confidence);
-          addLog('Page ' + (i + 1) + ' — ' + confidence + '% confidence', confidence >= 80 ? 'ok' : 'active');
-
-          setProgress(pageBase + pageSlice * 0.9, 'Encoding image ' + (i + 1) + '…');
-          const jpegBytes = await canvasToJpegBytes(canvas, q);
-          setProgress(pageBase + pageSlice, 'Page ' + (i + 1) + ' done');
-          return { canvas, jpegBytes, words, imgW: canvas.width, imgH: canvas.height };
-        }
-
-        // Sample first SAMPLE_SIZE images at default quality to estimate average size
-        for (let i = 0; i < SAMPLE_SIZE; i++) {
-          pages.push(await processImage(i, 1.0));
-        }
-
-        // Project total size; adjust quality before processing remaining images
-        const sampleBytes = pages.reduce((s, p) => s + p.jpegBytes.byteLength, 0);
-        const projectedTotal = (sampleBytes / SAMPLE_SIZE) * total;
-        if (projectedTotal > TARGET_BYTES) {
-          quality = Math.max(0.3, TARGET_BYTES / projectedTotal);
-          // Re-encode sample pages at the adjusted quality
-          for (let i = 0; i < pages.length; i++) {
-            pages[i].jpegBytes = await canvasToJpegBytes(pages[i].canvas, quality);
-          }
-        }
-
-        // Release sample canvases, then process remaining images at final quality
-        pages.forEach(p => releaseCanvas(p.canvas));
-        for (let i = SAMPLE_SIZE; i < total; i++) {
-          const page = await processImage(i, quality);
-          releaseCanvas(page.canvas);
-          pages.push(page);
-        }
-
-        // Pass 2: build PDF
-        const pdfDoc = await PDFDocument.create();
-        for (let i = 0; i < pages.length; i++) {
-          const { jpegBytes, words, imgW, imgH } = pages[i];
-          setProgress(75 + (i / total) * 22, 'Building PDF — page ' + (i + 1) + '…');
-          const scale = Math.min(PAGE_W / imgW, PAGE_H / imgH);
-          const drawW = imgW * scale;
-          const drawH = imgH * scale;
-          const drawX = (PAGE_W - drawW) / 2;
-          const drawY = (PAGE_H - drawH) / 2;
-          const page = pdfDoc.addPage([PAGE_W, PAGE_H]);
-          const pdfImg = await pdfDoc.embedJpg(jpegBytes);
-          page.drawImage(pdfImg, { x: drawX, y: drawY, width: drawW, height: drawH });
-          await addInvisibleTextLayer(page, words, imgW, imgH, drawX, drawY, drawW, drawH);
-        }
-
-        setProgress(99, 'Saving PDF…');
-        return await pdfDoc.save();
-      } finally {
-        await worker.terminate().catch(() => {});
       }
     }
 
@@ -937,11 +832,6 @@
 
       if (!files.length) { showError('No files selected. If you chose images and see this, iOS may have hit its file-picker limit — try selecting fewer at once.'); return; }
 
-      if (currentMode === 'images' && files.length > 100) {
-        showError('Please select 100 images or fewer per batch. For larger sets, use Pack Images instead.');
-        return;
-      }
-
       if (currentMode === 'pdf') {
         if (files.length !== 1) { showError('Please select exactly one PDF file.'); return; }
         if (!files[0].name.toLowerCase().endsWith('.pdf') && files[0].type !== 'application/pdf') {
@@ -954,22 +844,16 @@
       totalConfidenceSum = 0;
       confidenceCount = 0;
       showSection('status');
-      const isOcr = currentMode !== 'pack';
-      setProgress(0, isOcr ? 'Initializing OCR engine…' : 'Starting…');
-      addLog(isOcr ? 'Initializing OCR engine' : 'Packing images — no OCR', 'sync');
-      document.getElementById('status-note').textContent = isOcr
-        ? 'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.'
-        : '';
+      setProgress(0, 'Starting…');
+      addLog('Starting', 'sync');
+      document.getElementById('status-note').textContent = 'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.';
       // Yield to browser so it repaints the status screen before heavy work begins
       await new Promise(resolve => requestAnimationFrame(resolve));
       await acquireKeepAlive();
 
       try {
         let outputName, pdfBytes;
-        if (currentMode === 'images') {
-          outputName = 'ocr-output.pdf';
-          pdfBytes = await runImageMode(files);
-        } else if (currentMode === 'pack') {
+        if (currentMode === 'pack') {
           // Step 1: pack images into a plain PDF
           setProgress(0, 'Packing images…');
           const packedBytes = await runPackMode(files);
