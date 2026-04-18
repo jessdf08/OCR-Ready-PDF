@@ -828,7 +828,7 @@
       hideError();
 
       const inputEl = document.getElementById('input-' + currentMode);
-      const files = Array.from(inputEl.files).sort((a, b) => a.lastModified - b.lastModified);
+      const files = Array.from(inputEl.files);
 
       if (!files.length) { showError('No files selected. If you chose images and see this, iOS may have hit its file-picker limit — try selecting fewer at once.'); return; }
 
