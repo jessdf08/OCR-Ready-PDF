@@ -847,18 +847,18 @@
       const inputEl = document.getElementById(currentMode === 'images' ? 'input-images' : 'input-pdf');
       const files = Array.from(inputEl.files).sort((a, b) => a.lastModified - b.lastModified);
 
-      if (!files.length) { showError('No files selected.'); return; }
+      if (!files.length) { showError('No files selected. If you chose images and see this, iOS may have hit its file-picker limit — try selecting fewer at once.'); return; }
+
+      if (currentMode === 'images' && files.length > 100) {
+        showError('Please select 100 images or fewer per batch. iOS becomes unreliable above that. Split your images into groups and merge the resulting PDFs afterward.');
+        return;
+      }
 
       if (currentMode === 'pdf') {
         if (files.length !== 1) { showError('Please select exactly one PDF file.'); return; }
         if (!files[0].name.toLowerCase().endsWith('.pdf') && files[0].type !== 'application/pdf') {
           showError('Selected file does not appear to be a PDF.'); return;
         }
-      }
-
-      // Warn for large batches (can't know page count for PDF yet)
-      if (files.length > 50) {
-        showWarn('Processing ' + files.length + ' images may be slow or use a lot of memory on mobile. Consider smaller batches if you experience issues.');
       }
 
       // Reset stats for new run
