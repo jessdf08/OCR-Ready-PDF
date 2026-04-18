@@ -863,7 +863,6 @@
           setProgress(0, 'Initializing OCR engine…');
           addLog('Packing complete — starting OCR', 'sync');
           document.getElementById('status-note').textContent = 'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.';
-          await new Promise(resolve => requestAnimationFrame(resolve));
           outputName = 'images-ocr.pdf';
           pdfBytes = await runPdfMode(packedBlob);
         } else {
