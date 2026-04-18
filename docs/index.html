@@ -86,6 +86,13 @@
       box-shadow: 0 1px 4px rgba(0,0,0,0.1);
     }
 
+    .mode-hint {
+      font-size: 11px;
+      color: var(--muted);
+      margin: -12px 0 16px;
+      text-align: center;
+    }
+
     /* ---- File picker ---- */
     .file-area { margin-bottom: 16px; }
 
@@ -307,15 +314,22 @@
     <!-- Upload form -->
     <div id="upload-section">
       <div class="mode-toggle">
-        <button type="button" id="btn-mode-images" class="active" onclick="setMode('images')">Images</button>
-        <button type="button" id="btn-mode-pdf" onclick="setMode('pdf')">PDF</button>
+        <button type="button" id="btn-mode-images" class="active" onclick="setMode('images')">Images + OCR</button>
+        <button type="button" id="btn-mode-pack" onclick="setMode('pack')">Pack Images</button>
+        <button type="button" id="btn-mode-pdf" onclick="setMode('pdf')">PDF + OCR</button>
       </div>
+      <p class="mode-hint" id="mode-hint">Images → searchable PDF</p>
 
       <div class="file-area">
         <div id="picker-images">
           <label class="file-label" for="input-images">Choose images</label>
           <input type="file" id="input-images" accept="image/*" multiple onchange="onFilesChosen(this)">
           <div class="file-name" id="name-images"></div>
+        </div>
+        <div id="picker-pack" style="display:none">
+          <label class="file-label" for="input-pack">Choose images</label>
+          <input type="file" id="input-pack" accept="image/*" multiple onchange="onFilesChosen(this)">
+          <div class="file-name" id="name-pack"></div>
         </div>
         <div id="picker-pdf" style="display:none">
           <label class="file-label" for="input-pdf">Choose PDF</label>
@@ -520,21 +534,33 @@
     }
 
     // ─── Mode toggle ─────────────────────────────────────────────────────────
+    const MODE_HINTS = {
+      images: 'Images → searchable PDF (OCR included)',
+      pack:   'Images → plain PDF, no OCR — use for large batches, then run PDF + OCR',
+      pdf:    'PDF → searchable PDF (OCR included)',
+    };
+
     function setMode(mode) {
       currentMode = mode;
       document.getElementById('picker-images').style.display = mode === 'images' ? '' : 'none';
-      document.getElementById('picker-pdf').style.display   = mode === 'pdf'    ? '' : 'none';
+      document.getElementById('picker-pack').style.display   = mode === 'pack'   ? '' : 'none';
+      document.getElementById('picker-pdf').style.display    = mode === 'pdf'    ? '' : 'none';
       document.getElementById('btn-mode-images').classList.toggle('active', mode === 'images');
+      document.getElementById('btn-mode-pack').classList.toggle('active',   mode === 'pack');
       document.getElementById('btn-mode-pdf').classList.toggle('active',    mode === 'pdf');
-      const otherId = mode === 'images' ? 'input-pdf' : 'input-images';
-      document.getElementById(otherId).value = '';
-      document.getElementById('name-' + (mode === 'images' ? 'pdf' : 'images')).textContent = '';
+      ['images', 'pack', 'pdf'].forEach(m => {
+        if (m !== mode) {
+          document.getElementById('input-' + m).value = '';
+          document.getElementById('name-' + m).textContent = '';
+        }
+      });
+      document.getElementById('mode-hint').textContent = MODE_HINTS[mode];
       hideError();
       updateConvertButton();
     }
 
     function onFilesChosen(input) {
-      const which = input.id === 'input-images' ? 'images' : 'pdf';
+      const which = input.id.replace('input-', '');
       const nameEl = document.getElementById('name-' + which);
       if (input.files.length === 0) {
         nameEl.textContent = '';
@@ -548,7 +574,7 @@
     }
 
     function updateConvertButton() {
-      const inputId = currentMode === 'images' ? 'input-images' : 'input-pdf';
+      const inputId = 'input-' + currentMode;
       document.getElementById('btn-convert').disabled =
         document.getElementById(inputId).files.length === 0;
     }
@@ -559,8 +585,8 @@
       const dp = document.getElementById('done-pages');
       const dc = document.getElementById('done-conf');
       if (dp) dp.textContent = totalPagesProcessed;
-      if (dc) dc.textContent = confidenceCount > 0
-        ? Math.round(totalConfidenceSum / confidenceCount) + '%' : '—';
+      if (dc) dc.textContent = currentMode === 'pack' ? 'N/A'
+        : confidenceCount > 0 ? Math.round(totalConfidenceSum / confidenceCount) + '%' : '—';
       if (lastDownloadUrl) URL.revokeObjectURL(lastDownloadUrl);
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       lastDownloadUrl = URL.createObjectURL(blob);
@@ -840,17 +866,79 @@
       }
     }
 
+    // ─── Pack mode pipeline (images → plain PDF, no OCR) ─────────────────────
+    async function runPackMode(files) {
+      const TARGET_BYTES = 90 * 1024 * 1024;
+      const { PDFDocument } = PDFLib;
+      const total = files.length;
+      const SAMPLE_SIZE = Math.min(5, total);
+      let quality = 1.0;
+      const pdfDoc = await PDFDocument.create();
+
+      async function packOne(i, q) {
+        setProgress((i / total) * 100, 'Packing image ' + (i + 1) + ' of ' + total + '…');
+        document.getElementById('status-note').textContent = 'Page ' + (i + 1) + ' of ' + total;
+        const img = await fileToImage(files[i]);
+        const canvas = imageToCanvas(img, 2400);
+        URL.revokeObjectURL(img._objectURL);
+        setPagePreview(canvas, i + 1, total);
+        updateStats(i + 1, 0);
+        const imgW = canvas.width, imgH = canvas.height;
+        const jpegBytes = await canvasToJpegBytes(canvas, q);
+        releaseCanvas(canvas);
+        return { jpegBytes, imgW, imgH };
+      }
+
+      const samples = [];
+      for (let i = 0; i < SAMPLE_SIZE; i++) samples.push(await packOne(i, 1.0));
+
+      const sampleBytes = samples.reduce((s, p) => s + p.jpegBytes.byteLength, 0);
+      if ((sampleBytes / SAMPLE_SIZE) * total > TARGET_BYTES) {
+        quality = Math.max(0.3, TARGET_BYTES / ((sampleBytes / SAMPLE_SIZE) * total));
+        for (let i = 0; i < samples.length; i++) {
+          const img2 = await fileToImage(files[i]);
+          const c2 = imageToCanvas(img2, 2400);
+          URL.revokeObjectURL(img2._objectURL);
+          samples[i].jpegBytes = await canvasToJpegBytes(c2, quality);
+          samples[i].imgW = c2.width; samples[i].imgH = c2.height;
+          releaseCanvas(c2);
+        }
+      }
+
+      for (const { jpegBytes, imgW, imgH } of samples) {
+        const scale = Math.min(PAGE_W / imgW, PAGE_H / imgH);
+        const page = pdfDoc.addPage([PAGE_W, PAGE_H]);
+        page.drawImage(await pdfDoc.embedJpg(jpegBytes), {
+          x: (PAGE_W - imgW * scale) / 2, y: (PAGE_H - imgH * scale) / 2,
+          width: imgW * scale, height: imgH * scale
+        });
+      }
+
+      for (let i = SAMPLE_SIZE; i < total; i++) {
+        const { jpegBytes, imgW, imgH } = await packOne(i, quality);
+        const scale = Math.min(PAGE_W / imgW, PAGE_H / imgH);
+        const page = pdfDoc.addPage([PAGE_W, PAGE_H]);
+        page.drawImage(await pdfDoc.embedJpg(jpegBytes), {
+          x: (PAGE_W - imgW * scale) / 2, y: (PAGE_H - imgH * scale) / 2,
+          width: imgW * scale, height: imgH * scale
+        });
+      }
+
+      setProgress(99, 'Saving PDF…');
+      return await pdfDoc.save();
+    }
+
     // ─── Entry point ─────────────────────────────────────────────────────────
     async function startConversion() {
       hideError();
 
-      const inputEl = document.getElementById(currentMode === 'images' ? 'input-images' : 'input-pdf');
+      const inputEl = document.getElementById('input-' + currentMode);
       const files = Array.from(inputEl.files).sort((a, b) => a.lastModified - b.lastModified);
 
       if (!files.length) { showError('No files selected. If you chose images and see this, iOS may have hit its file-picker limit — try selecting fewer at once.'); return; }
 
       if (currentMode === 'images' && files.length > 100) {
-        showError('Please select 100 images or fewer per batch. iOS becomes unreliable above that. Split your images into groups and merge the resulting PDFs afterward.');
+        showError('Please select 100 images or fewer per batch. For larger sets, use Pack Images instead.');
         return;
       }
 
@@ -866,21 +954,28 @@
       totalConfidenceSum = 0;
       confidenceCount = 0;
       showSection('status');
-      setProgress(0, 'Initializing OCR engine…');
-      addLog('Initializing OCR engine', 'sync');
-      document.getElementById('status-note').textContent = 'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.';
+      const isOcr = currentMode !== 'pack';
+      setProgress(0, isOcr ? 'Initializing OCR engine…' : 'Starting…');
+      addLog(isOcr ? 'Initializing OCR engine' : 'Packing images — no OCR', 'sync');
+      document.getElementById('status-note').textContent = isOcr
+        ? 'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.'
+        : '';
       // Yield to browser so it repaints the status screen before heavy work begins
       await new Promise(resolve => requestAnimationFrame(resolve));
       await acquireKeepAlive();
 
       try {
-        const outputName = currentMode === 'pdf'
-          ? files[0].name.replace(/\.pdf$/i, '') + '-ocr.pdf'
-          : 'ocr-output.pdf';
-
-        const pdfBytes = currentMode === 'images'
-          ? await runImageMode(files)
-          : await runPdfMode(files[0]);
+        let outputName, pdfBytes;
+        if (currentMode === 'images') {
+          outputName = 'ocr-output.pdf';
+          pdfBytes = await runImageMode(files);
+        } else if (currentMode === 'pack') {
+          outputName = 'images-packed.pdf';
+          pdfBytes = await runPackMode(files);
+        } else {
+          outputName = files[0].name.replace(/\.pdf$/i, '') + '-ocr.pdf';
+          pdfBytes = await runPdfMode(files[0]);
+        }
 
         triggerDownload(pdfBytes, outputName);
 
