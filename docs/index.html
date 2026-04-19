@@ -382,6 +382,7 @@
         <button type="button" id="btn-mode-split"  onclick="setMode('split')">Split PDF</button>
         <button type="button" id="btn-mode-pdf"    onclick="setMode('pdf')">PDF → OCR</button>
         <button type="button" id="btn-mode-combine" onclick="setMode('combine')">Combine PDF</button>
+        <button type="button" id="btn-mode-compress" onclick="setMode('compress')">Compress PDF</button>
       </div>
       <p class="mode-hint" id="mode-hint">Pack images into a PDF — fast, no OCR</p>
 
@@ -420,6 +421,13 @@
           <label class="file-label" for="input-combine">Choose up to 20 PDFs (in order)</label>
           <input type="file" id="input-combine" accept="application/pdf,.pdf" multiple onchange="onFilesChosen(this,'combine')">
           <div class="file-name" id="name-combine"></div>
+        </div>
+
+        <!-- Mode 5: Compress PDF -->
+        <div id="picker-compress" style="display:none">
+          <label class="file-label" for="input-compress">Choose PDF to compress</label>
+          <input type="file" id="input-compress" accept="application/pdf,.pdf" onchange="onFilesChosen(this,'compress')">
+          <div class="file-name" id="name-compress"></div>
         </div>
       </div>
 
@@ -685,13 +693,14 @@
 
     // ─── Mode toggle ─────────────────────────────────────────────────────────
     const MODE_HINTS = {
-      images:  'Pack images into a PDF — fast, no OCR',
-      split:   'Split a PDF into multiple parts by page range',
-      pdf:     'Add searchable text layer to a scanned PDF via OCR',
-      combine: 'Merge up to 20 PDFs in order — preserves existing OCR text',
+      images:   'Pack images into a PDF — fast, no OCR',
+      split:    'Split a PDF into multiple parts by page range',
+      pdf:      'Add searchable text layer to a scanned PDF via OCR',
+      combine:  'Merge up to 20 PDFs in order — preserves existing OCR text',
+      compress: 'Reduce file size of an app-generated PDF — preserves searchable text',
     };
 
-    const MODES = ['images', 'split', 'pdf', 'combine'];
+    const MODES = ['images', 'split', 'pdf', 'combine', 'compress'];
 
     function setMode(mode) {
       currentMode = mode;
@@ -1181,6 +1190,114 @@
       return await mergedDoc.save();
     }
 
+    // ─── Compress mode pipeline ──────────────────────────────────────────────
+    async function runCompressMode(file) {
+      const { PDFDocument, PDFName } = PDFLib;
+      const TARGET = 90 * 1024 * 1024;
+
+      setProgress(2, 'Loading PDF…');
+      let srcDoc;
+      try {
+        srcDoc = await PDFDocument.load(await file.arrayBuffer());
+      } catch(e) {
+        throw new Error('Could not open the PDF. It may be password-protected or corrupted.');
+      }
+
+      const totalPages = srcDoc.getPageCount();
+      const SAMPLE_SIZE = Math.min(3, totalPages);
+
+      // Extract raw JPEG bytes from first DCTDecode XObject on a page
+      function getPageJpegBytes(doc, pageIndex) {
+        const page = doc.getPage(pageIndex);
+        const resources = page.node.Resources();
+        if (!resources) return null;
+        const xObjDict = resources.lookup(PDFName.of('XObject'));
+        if (!xObjDict || typeof xObjDict.entries !== 'function') return null;
+        for (const [, val] of xObjDict.entries()) {
+          const obj = doc.context.lookup(val);
+          if (!obj || !obj.dict || !obj.contents) continue;
+          const filter = obj.dict.lookup(PDFName.of('Filter'));
+          if (filter && filter.toString().includes('DCTDecode')) return obj.contents;
+        }
+        return null;
+      }
+
+      // Decode JPEG bytes to canvas for re-encoding
+      async function jpegBytesToCanvas(bytes) {
+        const blob = new Blob([bytes], { type: 'image/jpeg' });
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+        URL.revokeObjectURL(url);
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        return canvas;
+      }
+
+      // Adaptive quality: sample first pages at quality 1.0 to project output size
+      let sampleTotalBytes = 0;
+      let sampleCount = 0;
+      for (let i = 0; i < SAMPLE_SIZE; i++) {
+        setProgress(2 + (i / SAMPLE_SIZE) * 8, 'Sampling page ' + (i + 1) + '…');
+        const rawJpeg = getPageJpegBytes(srcDoc, i);
+        if (!rawJpeg) continue;
+        const canvas = await jpegBytesToCanvas(rawJpeg);
+        const reencoded = await canvasToJpegBytes(canvas, 1.0);
+        releaseCanvas(canvas);
+        sampleTotalBytes += reencoded.byteLength;
+        sampleCount++;
+      }
+
+      let quality = 1.0;
+      if (sampleCount > 0) {
+        const projected = (sampleTotalBytes / sampleCount) * totalPages;
+        addLog('Projected ' + (projected / 1e6).toFixed(1) + ' MB at quality 1.0', 'sync');
+        if (projected > TARGET) {
+          quality = Math.max(0.3, Math.sqrt(TARGET / projected));
+          addLog('Adjusting quality to ' + quality.toFixed(2), 'sync');
+        }
+      }
+
+      // Build output: copyPages (preserves text layers), then replace image XObject
+      const outDoc = await PDFDocument.create();
+      for (let i = 0; i < totalPages; i++) {
+        setProgress(10 + (i / totalPages) * 89, 'Compressing page ' + (i + 1) + ' of ' + totalPages + '…');
+
+        const [copiedPage] = await outDoc.copyPages(srcDoc, [i]);
+        outDoc.addPage(copiedPage);
+        totalPagesProcessed = i + 1;
+
+        const rawJpeg = getPageJpegBytes(srcDoc, i);
+        if (!rawJpeg) continue;
+
+        const canvas = await jpegBytesToCanvas(rawJpeg);
+        const newJpeg = await canvasToJpegBytes(canvas, quality);
+        releaseCanvas(canvas);
+        const newImg = await outDoc.embedJpg(newJpeg);
+
+        // Replace the DCTDecode XObject in the copied page's resources
+        const resources = copiedPage.node.Resources();
+        if (!resources) continue;
+        const xObjDict = resources.lookup(PDFName.of('XObject'));
+        if (!xObjDict || typeof xObjDict.entries !== 'function') continue;
+        for (const [name, val] of xObjDict.entries()) {
+          const obj = outDoc.context.lookup(val);
+          if (!obj || !obj.dict || !obj.contents) continue;
+          const filter = obj.dict.lookup(PDFName.of('Filter'));
+          if (filter && filter.toString().includes('DCTDecode')) {
+            xObjDict.set(name, newImg.ref);
+            break;
+          }
+        }
+      }
+
+      setProgress(99, 'Saving PDF…');
+      const pdfBytes = await outDoc.save();
+      addLog('Compressed to ' + (pdfBytes.byteLength / 1e6).toFixed(1) + ' MB', 'ok');
+      return pdfBytes;
+    }
+
     // ─── Entry point ─────────────────────────────────────────────────────────
     async function startConversion() {
       hideError();
@@ -1205,6 +1322,11 @@
         if (files.length < 2) { showError('Please select at least 2 PDF files to combine.'); return; }
         if (files.length > 20) { showError('Maximum 20 PDF files at a time.'); return; }
       }
+      if (currentMode === 'compress') {
+        if (files.length !== 1 || (!files[0].name.toLowerCase().endsWith('.pdf') && files[0].type !== 'application/pdf')) {
+          showError('Please select exactly one PDF file.'); return;
+        }
+      }
 
       totalPagesProcessed = 0; totalConfidenceSum = 0; confidenceCount = 0;
       showSection('status');
@@ -1212,7 +1334,8 @@
       addLog('Starting — ' + currentMode + ' mode', 'sync');
       document.getElementById('status-note').textContent =
         currentMode === 'pdf' ? 'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.'
-                              : 'You can switch apps — processing continues in the background.';
+        : currentMode === 'compress' ? 'Re-encoding images at reduced quality — text layers are preserved.'
+        : 'You can switch apps — processing continues in the background.';
       await new Promise(resolve => requestAnimationFrame(resolve));
       await acquireKeepAlive();
 
@@ -1237,6 +1360,13 @@
           const baseName = files[0].name.replace(/\.pdf$/i, '');
           const pdfBytes = await runCombineMode(files);
           triggerDownload(pdfBytes, baseName + '-combined.pdf', false);
+
+        } else if (currentMode === 'compress') {
+          const outputName = files[0].name.replace(/\.pdf$/i, '') + '-compressed.pdf';
+          const pdfBytes = await runCompressMode(files[0]);
+          const sizeMB = (pdfBytes.byteLength / 1e6).toFixed(1);
+          document.getElementById('done-sub').textContent = 'Compressed to ' + sizeMB + ' MB · Your PDF is ready.';
+          triggerDownload(pdfBytes, outputName, false);
         }
 
       } catch (err) {
