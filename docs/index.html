@@ -316,6 +316,42 @@
     }
     #split-page-info { font-size: 11px; color: var(--muted); margin-top: 6px; }
 
+    /* ---- Images-done download choice ---- */
+    .dl-options { display: flex; flex-direction: column; gap: 10px; margin: 16px 0; }
+    .dl-option {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 12px 14px;
+      background: var(--bg);
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: border-color .15s;
+    }
+    .dl-option:has(input:checked) { border-color: var(--accent); }
+    .dl-option input[type="radio"] {
+      position: static; width: auto; height: auto;
+      opacity: 1; overflow: visible;
+      margin-top: 2px; flex-shrink: 0;
+      accent-color: var(--accent);
+    }
+    .dl-option-body { flex: 1; }
+    .dl-option-body input[type="number"],
+    .dl-option-body input[type="text"] {
+      position: static; width: auto; height: auto;
+      opacity: 1; overflow: visible;
+      display: block; width: 100%;
+      margin-top: 8px;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 14px;
+      color: var(--text);
+      background: var(--card);
+    }
+    .dl-option-body input[type="number"] { width: 72px; display: inline-block; margin-top: 0; margin-left: 6px; }
+    .dl-hint { font-size: 11px; color: var(--muted); margin-top: 5px; }
+
     /* ---- Split links list ---- */
     .split-links { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; }
 
@@ -420,6 +456,45 @@
       <p class="status-note" style="margin-top:8px;opacity:0.6">You can switch apps — processing continues in the background.</p>
     </div>
 
+    <!-- Images → PDF: choose how to download -->
+    <div id="images-done-section" style="display:none">
+      <div class="done-heading">Packed!</div>
+      <div class="done-sub"><span id="img-done-pages">0</span> pages · choose how to download</div>
+
+      <div class="dl-options">
+        <label class="dl-option">
+          <input type="radio" name="dl-mode" value="single" checked onchange="onDlModeChange()">
+          <div class="dl-option-body">One file</div>
+        </label>
+
+        <label class="dl-option">
+          <input type="radio" name="dl-mode" value="parts" onchange="onDlModeChange()">
+          <div class="dl-option-body">
+            Equal parts — split into
+            <input type="number" id="img-split-parts" min="2" max="500" value="2"
+              onclick="this.closest('.dl-option').querySelector('input[type=radio]').checked=true">
+            parts
+          </div>
+        </label>
+
+        <label class="dl-option">
+          <input type="radio" name="dl-mode" value="chapters" onchange="onDlModeChange()">
+          <div class="dl-option-body">
+            Custom chapters
+            <div id="chapters-extra" style="display:none">
+              <input type="text" id="chapter-sizes"
+                placeholder="Pages per chapter, e.g.  50, 80, 120"
+                oninput="updateChapterHint()">
+              <div class="dl-hint" id="chapter-hint"></div>
+            </div>
+          </div>
+        </label>
+      </div>
+
+      <button class="btn-primary" onclick="downloadPackedPdf()">Download</button>
+      <button class="btn-secondary" style="margin-top:8px" onclick="resetApp()">Start over</button>
+    </div>
+
     <!-- Split done: one link per part -->
     <div id="split-done-section" style="display:none">
       <div class="done-heading">Split Complete</div>
@@ -463,6 +538,8 @@
     let _wakeLock = null;
     let _bgAudio = null;
     let splitPartUrls = []; // object URLs for split parts — revoked on reset
+    let packedPdfBytes = null;  // held after images→PDF until user chooses download option
+    let packedPageCount = 0;
 
     // Output page size: 8.5" × 11" at 72 pts/inch
     const PAGE_W = 612;
@@ -505,7 +582,7 @@
 
     // ─── UI helpers ──────────────────────────────────────────────────────────
     function showSection(name) {
-      ['upload', 'status', 'split-done', 'done'].forEach(id => {
+      ['upload', 'status', 'images-done', 'split-done', 'done'].forEach(id => {
         document.getElementById(id + '-section').style.display = id === name ? 'block' : 'none';
       });
       const isStatus = name === 'status';
@@ -684,7 +761,92 @@
       showSection('done');
     }
 
-    function triggerSplitDownload(parts, baseName) {
+    // ─── Images-done download choice ─────────────────────────────────────────
+    function showImagesDone(pdfBytes, pageCount) {
+      releaseKeepAlive();
+      packedPdfBytes = pdfBytes;
+      packedPageCount = pageCount;
+      document.getElementById('img-done-pages').textContent = pageCount;
+      document.getElementById('img-split-parts').value = 2;
+      document.querySelector('input[name="dl-mode"][value="single"]').checked = true;
+      document.getElementById('chapters-extra').style.display = 'none';
+      document.getElementById('chapter-hint').textContent = '';
+      showSection('images-done');
+    }
+
+    function onDlModeChange() {
+      const mode = document.querySelector('input[name="dl-mode"]:checked').value;
+      document.getElementById('chapters-extra').style.display = mode === 'chapters' ? '' : 'none';
+      if (mode === 'chapters') updateChapterHint();
+    }
+
+    function updateChapterHint() {
+      const raw = document.getElementById('chapter-sizes').value;
+      const sizes = raw.split(/[,\s]+/).map(s => parseInt(s.trim(), 10)).filter(n => n > 0);
+      const sum = sizes.reduce((a, b) => a + b, 0);
+      const remaining = packedPageCount - sum;
+      let hint = '';
+      if (sizes.length > 0) {
+        hint = sizes.length + ' chapter' + (sizes.length > 1 ? 's' : '') + ', ' + sum + ' pages';
+        if (remaining > 0) hint += ' · ' + remaining + ' remaining pages become chapter ' + (sizes.length + 1);
+        if (remaining < 0) hint += ' · exceeds total by ' + (-remaining) + ' — last chapter will be trimmed';
+      }
+      document.getElementById('chapter-hint').textContent = hint;
+    }
+
+    async function downloadPackedPdf() {
+      if (!packedPdfBytes) return;
+      const mode = document.querySelector('input[name="dl-mode"]:checked').value;
+
+      if (mode === 'single') {
+        triggerDownload(packedPdfBytes, 'images.pdf', false);
+        packedPdfBytes = null;
+        return;
+      }
+
+      // Build page ranges
+      const { PDFDocument } = PDFLib;
+      const srcDoc = await PDFDocument.load(packedPdfBytes);
+      const total = srcDoc.getPageCount();
+      const ranges = [];
+
+      if (mode === 'parts') {
+        const n = Math.max(2, parseInt(document.getElementById('img-split-parts').value, 10) || 2);
+        const perPart = Math.ceil(total / n);
+        for (let s = 0; s < total; s += perPart)
+          ranges.push({ start: s, len: Math.min(perPart, total - s) });
+      } else {
+        const sizes = document.getElementById('chapter-sizes').value
+          .split(/[,\s]+/).map(s => parseInt(s.trim(), 10)).filter(n => n > 0);
+        if (!sizes.length) { showError('Enter page counts for each chapter.'); return; }
+        let pos = 0;
+        for (const sz of sizes) {
+          if (pos >= total) break;
+          ranges.push({ start: pos, len: Math.min(sz, total - pos) });
+          pos += sz;
+        }
+        if (pos < total) ranges.push({ start: pos, len: total - pos }); // remainder
+      }
+
+      const label = mode === 'chapters' ? 'Chapter' : 'Part';
+      showSection('status');
+      setProgress(0, 'Splitting…');
+      const parts = [];
+      for (let i = 0; i < ranges.length; i++) {
+        setProgress((i / ranges.length) * 99, 'Creating ' + label + ' ' + (i + 1) + ' of ' + ranges.length + '…');
+        const partDoc = await PDFDocument.create();
+        const indices = Array.from({ length: ranges[i].len }, (_, j) => ranges[i].start + j);
+        const pages = await partDoc.copyPages(srcDoc, indices);
+        pages.forEach(p => partDoc.addPage(p));
+        parts.push(await partDoc.save());
+      }
+
+      packedPdfBytes = null;
+      triggerSplitDownload(parts, 'images', label);
+    }
+
+    function triggerSplitDownload(parts, baseName, label) {
+      label = label || 'Part';
       releaseKeepAlive();
       splitPartUrls.forEach(u => URL.revokeObjectURL(u));
       splitPartUrls = [];
@@ -696,12 +858,12 @@
         const a = document.createElement('a');
         a.className = 'btn-download';
         a.href = url;
-        a.download = baseName + ' (Part ' + (i + 1) + ').pdf';
-        a.textContent = 'Download Part ' + (i + 1) + ' of ' + parts.length;
+        a.download = baseName + ' (' + label + ' ' + (i + 1) + ').pdf';
+        a.textContent = 'Download ' + label + ' ' + (i + 1) + ' of ' + parts.length;
         container.appendChild(a);
       });
       document.getElementById('split-done-sub').textContent =
-        parts.length + ' parts ready — tap each to save.';
+        parts.length + ' ' + label.toLowerCase() + (parts.length > 1 ? 's' : '') + ' ready — tap each to save.';
       showSection('split-done');
     }
 
@@ -709,6 +871,7 @@
       if (lastDownloadUrl) { URL.revokeObjectURL(lastDownloadUrl); lastDownloadUrl = null; }
       splitPartUrls.forEach(u => URL.revokeObjectURL(u));
       splitPartUrls = [];
+      packedPdfBytes = null;
       location.reload();
     }
 
@@ -1034,8 +1197,7 @@
         if (currentMode === 'images') {
           setProgress(0, 'Packing images…');
           const pdfBytes = await runPackMode(files);
-          totalPagesProcessed = files.length;
-          triggerDownload(pdfBytes, 'images.pdf', false);
+          showImagesDone(pdfBytes, files.length);
 
         } else if (currentMode === 'split') {
           const numParts = parseInt(document.getElementById('split-parts').value, 10) || 2;
