@@ -415,27 +415,40 @@
     const PAGE_W = 612;
     const PAGE_H = 792;
 
-    // ─── Background keep-alive (Wake Lock + silent audio) ────────────────────
+    // ─── Background keep-alive (Wake Lock + audio session) ───────────────────
     async function acquireKeepAlive() {
-      // Screen wake lock: prevents display from sleeping
       try {
         if ('wakeLock' in navigator) _wakeLock = await navigator.wakeLock.request('screen');
       } catch(e) {}
-      // Silent audio loop: tells iOS the tab has active media — keeps JS running in background
+      // Oscillator at inaudible gain — iOS treats this as an active audio session
+      // and keeps the tab alive when the user switches apps. A zero-fill silent
+      // buffer does NOT qualify; iOS suspends it as inactive.
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const buf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate); // 1s silence
-        const src = ctx.createBufferSource();
-        src.buffer = buf; src.loop = true;
-        src.connect(ctx.destination); src.start(0);
-        _bgAudio = { ctx, src };
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        gain.gain.value = 0.001;  // inaudible but non-zero signal
+        osc.frequency.value = 1;  // 1 Hz — below audible range
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(0);
+        _bgAudio = { ctx, node: osc };
       } catch(e) {}
     }
 
     function releaseKeepAlive() {
       try { if (_wakeLock) { _wakeLock.release(); _wakeLock = null; } } catch(e) {}
-      try { if (_bgAudio) { _bgAudio.src.stop(); _bgAudio.ctx.close(); _bgAudio = null; } } catch(e) {}
+      try { if (_bgAudio) { _bgAudio.node.stop(); _bgAudio.ctx.close(); _bgAudio = null; } } catch(e) {}
     }
+
+    // Wake Lock is auto-released when the page hides; re-acquire on return.
+    // Also resume AudioContext if iOS suspended it while in background.
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState === 'visible' && _bgAudio) {
+        try { if (_bgAudio.ctx.state === 'suspended') await _bgAudio.ctx.resume(); } catch(e) {}
+        try { if ('wakeLock' in navigator) _wakeLock = await navigator.wakeLock.request('screen'); } catch(e) {}
+      }
+    });
 
     // ─── UI helpers ──────────────────────────────────────────────────────────
     function showSection(name) {
