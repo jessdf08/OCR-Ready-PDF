@@ -365,6 +365,16 @@
       <p class="status-note" style="margin-top:8px;opacity:0.6">You can switch apps — processing continues in the background.</p>
     </div>
 
+    <!-- Pack done: download backup + start OCR -->
+    <div id="pack-done-section" style="display:none">
+      <div class="done-heading">Step 1 Complete</div>
+      <div class="done-sub"><span id="pack-done-pages">0</span> images packed into a PDF.</div>
+      <a class="btn-download" id="pack-download-link" href="#" style="background:var(--muted)">Download Packed PDF (backup)</a>
+      <p class="status-note" style="margin:12px 0 16px">Save this as a backup in case Step 2 crashes, then tap below to start OCR.</p>
+      <button class="btn-primary" onclick="runOcrOnPacked()">Start OCR (Step 2)</button>
+      <button class="btn-secondary" style="margin-top:10px" onclick="resetApp()">Start over</button>
+    </div>
+
     <!-- Done: download -->
     <div id="done-section" style="display:none">
       <div class="done-heading">Done!</div>
@@ -398,6 +408,8 @@
     let lastDownloadUrl = null;
     let _wakeLock = null;
     let _bgAudio = null;
+    let packedPdfBytes = null;
+    let packedFilename = null;
 
     // Output page size: 8.5" × 11" at 72 pts/inch
     const PAGE_W = 612;
@@ -427,7 +439,7 @@
 
     // ─── UI helpers ──────────────────────────────────────────────────────────
     function showSection(name) {
-      ['upload', 'status', 'done'].forEach(id => {
+      ['upload', 'status', 'pack-done', 'done'].forEach(id => {
         document.getElementById(id + '-section').style.display = id === name ? 'block' : 'none';
       });
       const isStatus = name === 'status';
@@ -570,6 +582,44 @@
         document.getElementById(inputId).files.length === 0;
     }
 
+    // ─── Pack intermediate step ───────────────────────────────────────────────
+    function showPackDone(pdfBytes, filename) {
+      releaseKeepAlive();
+      packedPdfBytes = pdfBytes;
+      packedFilename = filename;
+      document.getElementById('pack-done-pages').textContent = totalPagesProcessed;
+      if (lastDownloadUrl) URL.revokeObjectURL(lastDownloadUrl);
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      lastDownloadUrl = URL.createObjectURL(blob);
+      const link = document.getElementById('pack-download-link');
+      link.href = lastDownloadUrl;
+      link.download = filename;
+      showSection('pack-done');
+    }
+
+    async function runOcrOnPacked() {
+      if (!packedPdfBytes) return;
+      const blob = new Blob([packedPdfBytes], { type: 'application/pdf' });
+      const ocrFilename = (packedFilename || 'images-packed.pdf').replace(/\.pdf$/i, '-ocr.pdf');
+      packedPdfBytes = null;
+      packedFilename = null;
+      totalPagesProcessed = 0; totalConfidenceSum = 0; confidenceCount = 0;
+      showSection('status');
+      setProgress(0, 'Initializing OCR engine…');
+      addLog('Starting OCR', 'sync');
+      document.getElementById('status-note').textContent = 'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.';
+      await acquireKeepAlive();
+      try {
+        const pdfBytes = await runPdfMode(blob);
+        triggerDownload(pdfBytes, ocrFilename);
+      } catch (err) {
+        console.error(err);
+        releaseKeepAlive();
+        showSection('upload');
+        showError('Error: ' + (err.message || 'Unknown error'));
+      }
+    }
+
     // ─── Download / reset ────────────────────────────────────────────────────
     function triggerDownload(pdfBytes, filename) {
       releaseKeepAlive();
@@ -588,10 +638,9 @@
     }
 
     function resetApp() {
-      if (lastDownloadUrl) {
-        URL.revokeObjectURL(lastDownloadUrl);
-        lastDownloadUrl = null;
-      }
+      if (lastDownloadUrl) { URL.revokeObjectURL(lastDownloadUrl); lastDownloadUrl = null; }
+      packedPdfBytes = null;
+      packedFilename = null;
       location.reload();
     }
 
@@ -863,30 +912,20 @@
       showSection('status');
       setProgress(0, 'Starting…');
       addLog('Starting', 'sync');
-      document.getElementById('status-note').textContent = 'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.';
+      document.getElementById('status-note').textContent = currentMode === 'pack' ? 'Packing images — you can switch apps.' : 'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.';
       // Yield to browser so it repaints the status screen before heavy work begins
       await new Promise(resolve => requestAnimationFrame(resolve));
       await acquireKeepAlive();
 
       try {
-        let outputName, pdfBytes;
         if (currentMode === 'pack') {
-          // Step 1: pack images into a plain PDF
           setProgress(0, 'Packing images…');
           const packedBytes = await runPackMode(files);
-          // Step 2: run OCR on the packed PDF automatically
-          const packedBlob = new Blob([packedBytes], { type: 'application/pdf' });
-          totalPagesProcessed = 0; totalConfidenceSum = 0; confidenceCount = 0;
-          setProgress(0, 'Initializing OCR engine…');
-          addLog('Packing complete — starting OCR', 'sync');
-          document.getElementById('status-note').textContent = 'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.';
-          outputName = 'images-ocr.pdf';
-          pdfBytes = await runPdfMode(packedBlob);
-        } else {
-          outputName = files[0].name.replace(/\.pdf$/i, '') + '-ocr.pdf';
-          pdfBytes = await runPdfMode(files[0]);
+          showPackDone(packedBytes, 'images-packed.pdf');
+          return;
         }
-
+        const outputName = files[0].name.replace(/\.pdf$/i, '') + '-ocr.pdf';
+        const pdfBytes = await runPdfMode(files[0]);
         triggerDownload(pdfBytes, outputName);
 
       } catch (err) {
