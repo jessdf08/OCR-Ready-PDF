@@ -686,12 +686,9 @@
       }
 
       const numPages = pdfjsDoc.numPages;
+      const SAMPLE_SIZE = Math.min(3, numPages);
+      let quality = 1.0;
       let currentPage = 0;
-
-      // Use input file size as a proxy to decide quality upfront
-      const quality = file.size > TARGET_BYTES
-        ? Math.max(0.3, TARGET_BYTES / file.size)
-        : 1.0;
 
       const worker = await Tesseract.createWorker('eng', 1, {
         logger: m => {
@@ -705,52 +702,72 @@
       });
       const outDoc = await PDFDocument.create();
 
+      async function renderPage(pageNum, q) {
+        currentPage = pageNum - 1;
+        const pageBase = (currentPage / numPages) * 100;
+        const pageSlice = (1 / numPages) * 100;
+
+        setProgress(pageBase, 'Rendering page ' + pageNum + ' of ' + numPages + '…');
+        document.getElementById('status-note').textContent = numPages > 1 ? 'Page ' + pageNum + ' of ' + numPages : '';
+
+        const pdfjsPage = await pdfjsDoc.getPage(pageNum);
+        const viewport2x = pdfjsPage.getViewport({ scale: 2.0 });
+        const canvas = document.createElement('canvas');
+        canvas.width  = Math.round(viewport2x.width);
+        canvas.height = Math.round(viewport2x.height);
+        await pdfjsPage.render({ canvasContext: canvas.getContext('2d'), viewport: viewport2x }).promise;
+
+        const imgW = canvas.width, imgH = canvas.height;
+
+        setProgress(pageBase + pageSlice * 0.2, 'OCR — page ' + pageNum + ' of ' + numPages + '…');
+        const { data } = await worker.recognize(canvas);
+        const words = (data.words || []).filter(w => w.text && w.text.trim());
+        const confidence = Math.round(data.confidence || 0);
+        setPagePreview(canvas, pageNum, numPages);
+        updateStats(pageNum, confidence);
+        addLog('Page ' + pageNum + ' — ' + confidence + '% confidence', confidence >= 80 ? 'ok' : 'active');
+
+        setProgress(pageBase + pageSlice * 0.9, 'Building PDF…');
+        const jpegBytes = await canvasToJpegBytes(canvas, q);
+        return { canvas, jpegBytes, words, imgW, imgH };
+      }
+
+      async function embedPage(canvas, jpegBytes, words, imgW, imgH, pageNum) {
+        const scale = Math.min(PAGE_W / imgW, PAGE_H / imgH);
+        const drawW = imgW * scale, drawH = imgH * scale;
+        const drawX = (PAGE_W - drawW) / 2, drawY = (PAGE_H - drawH) / 2;
+        const outPage = outDoc.addPage([PAGE_W, PAGE_H]);
+        const pdfImg  = await outDoc.embedJpg(jpegBytes);
+        outPage.drawImage(pdfImg, { x: drawX, y: drawY, width: drawW, height: drawH });
+        await addInvisibleTextLayer(outPage, words, imgW, imgH, drawX, drawY, drawW, drawH);
+        setProgress((pageNum / numPages) * 100, 'Page ' + pageNum + ' done');
+      }
+
       try {
-        for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-          currentPage = pageNum - 1;
-          const pageBase = (currentPage / numPages) * 100;
-          const pageSlice = (1 / numPages) * 100;
+        // Sample first pages at full quality to project total output size
+        const samples = [];
+        for (let i = 0; i < SAMPLE_SIZE; i++) {
+          samples.push(await renderPage(i + 1, 1.0));
+        }
 
-          setProgress(pageBase, 'Rendering page ' + pageNum + ' of ' + numPages + '…');
-          document.getElementById('status-note').textContent = numPages > 1 ? 'Page ' + pageNum + ' of ' + numPages : '';
+        const sampleBytes = samples.reduce((s, p) => s + p.jpegBytes.byteLength, 0);
+        if ((sampleBytes / SAMPLE_SIZE) * numPages > TARGET_BYTES) {
+          quality = Math.max(0.3, TARGET_BYTES / ((sampleBytes / SAMPLE_SIZE) * numPages));
+          for (const s of samples) {
+            s.jpegBytes = await canvasToJpegBytes(s.canvas, quality);
+          }
+        }
 
-          const pdfjsPage = await pdfjsDoc.getPage(pageNum);
-
-          // Render at 2x for better OCR quality
-          const viewport2x = pdfjsPage.getViewport({ scale: 2.0 });
-          const canvas = document.createElement('canvas');
-          canvas.width  = Math.round(viewport2x.width);
-          canvas.height = Math.round(viewport2x.height);
-          await pdfjsPage.render({ canvasContext: canvas.getContext('2d'), viewport: viewport2x }).promise;
-
-          const imgW = canvas.width;
-          const imgH = canvas.height;
-
-          setProgress(pageBase + pageSlice * 0.2, 'OCR — page ' + pageNum + ' of ' + numPages + '…');
-          const { data } = await worker.recognize(canvas);
-          const words = (data.words || []).filter(w => w.text && w.text.trim());
-          const confidence = Math.round(data.confidence || 0);
-          setPagePreview(canvas, pageNum, numPages);
-          updateStats(pageNum, confidence);
-          addLog('Page ' + pageNum + ' — ' + confidence + '% confidence', confidence >= 80 ? 'ok' : 'active');
-
-          setProgress(pageBase + pageSlice * 0.9, 'Building PDF…');
-          const jpegBytes = await canvasToJpegBytes(canvas, quality);
+        for (let i = 0; i < samples.length; i++) {
+          const { canvas, jpegBytes, words, imgW, imgH } = samples[i];
           releaseCanvas(canvas);
+          await embedPage(canvas, jpegBytes, words, imgW, imgH, i + 1);
+        }
 
-          // Fit rendered page into 8.5"×11" portrait with white margins
-          const scale = Math.min(PAGE_W / imgW, PAGE_H / imgH);
-          const drawW = imgW * scale;
-          const drawH = imgH * scale;
-          const drawX = (PAGE_W - drawW) / 2;
-          const drawY = (PAGE_H - drawH) / 2;
-
-          const outPage = outDoc.addPage([PAGE_W, PAGE_H]);
-          const pdfImg  = await outDoc.embedJpg(jpegBytes);
-          outPage.drawImage(pdfImg, { x: drawX, y: drawY, width: drawW, height: drawH });
-
-          await addInvisibleTextLayer(outPage, words, imgW, imgH, drawX, drawY, drawW, drawH);
-          setProgress(pageBase + pageSlice, 'Page ' + pageNum + ' done');
+        for (let pageNum = SAMPLE_SIZE + 1; pageNum <= numPages; pageNum++) {
+          const { canvas, jpegBytes, words, imgW, imgH } = await renderPage(pageNum, quality);
+          releaseCanvas(canvas);
+          await embedPage(canvas, jpegBytes, words, imgW, imgH, pageNum);
         }
 
         setProgress(99, 'Saving PDF…');
