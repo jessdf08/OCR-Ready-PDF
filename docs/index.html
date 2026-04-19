@@ -599,6 +599,10 @@
 
     async function runOcrOnPacked() {
       if (!packedPdfBytes) return;
+      const CHUNK_SIZE = 50;
+      const TARGET_BYTES = 90 * 1024 * 1024;
+      const { PDFDocument } = PDFLib;
+
       const blob = new Blob([packedPdfBytes], { type: 'application/pdf' });
       const ocrFilename = (packedFilename || 'images-packed.pdf').replace(/\.pdf$/i, '-ocr.pdf');
       packedPdfBytes = null;
@@ -609,14 +613,113 @@
       addLog('Starting OCR', 'sync');
       document.getElementById('status-note').textContent = 'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.';
       await acquireKeepAlive();
+
+      let pdfjsDoc, worker;
       try {
-        const pdfBytes = await runPdfMode(blob);
-        triggerDownload(pdfBytes, ocrFilename);
+        const arrayBuffer = await blob.arrayBuffer();
+        try {
+          pdfjsDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        } catch (e) {
+          throw new Error('Could not open the packed PDF.');
+        }
+
+        const numPages = pdfjsDoc.numPages;
+        const totalChunks = Math.ceil(numPages / CHUNK_SIZE);
+        let globalCurrentPage = 0;
+
+        worker = await Tesseract.createWorker('eng', 1, {
+          logger: m => {
+            if (m.status === 'recognizing text') {
+              const pct = ((globalCurrentPage + m.progress) / numPages) * 95;
+              setProgress(pct, 'OCR — page ' + (globalCurrentPage + 1) + ' of ' + numPages + '…');
+            }
+          }
+        });
+
+        // Sample first 3 pages at full quality to calibrate JPEG compression
+        const SAMPLE_SIZE = Math.min(3, numPages);
+        let quality = 1.0;
+        let sampleTotalBytes = 0;
+        for (let i = 0; i < SAMPLE_SIZE; i++) {
+          const pg = await pdfjsDoc.getPage(i + 1);
+          const vp = pg.getViewport({ scale: 2.0 });
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+          await pg.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+          sampleTotalBytes += (await canvasToJpegBytes(canvas, 1.0)).byteLength;
+          releaseCanvas(canvas);
+        }
+        const projected = (sampleTotalBytes / SAMPLE_SIZE) * numPages;
+        if (projected > TARGET_BYTES) quality = Math.max(0.3, TARGET_BYTES / projected);
+
+        const chunkPdfs = [];
+
+        for (let chunk = 0; chunk < totalChunks; chunk++) {
+          const startPage = chunk * CHUNK_SIZE + 1;
+          const endPage = Math.min((chunk + 1) * CHUNK_SIZE, numPages);
+          const chunkLabel = 'chunk ' + (chunk + 1) + ' of ' + totalChunks;
+          addLog('OCR ' + chunkLabel + ' (pages ' + startPage + '–' + endPage + ')', 'sync');
+
+          const chunkDoc = await PDFDocument.create();
+
+          for (let pageNum = startPage; pageNum <= endPage; pageNum++) {
+            globalCurrentPage = pageNum - 1;
+            setProgress((globalCurrentPage / numPages) * 95,
+              'Rendering page ' + pageNum + ' of ' + numPages + ' (' + chunkLabel + ')…');
+            document.getElementById('status-note').textContent =
+              'Page ' + pageNum + ' of ' + numPages + ' · ' + chunkLabel;
+
+            const pdfjsPage = await pdfjsDoc.getPage(pageNum);
+            const vp = pdfjsPage.getViewport({ scale: 2.0 });
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+            await pdfjsPage.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+
+            const imgW = canvas.width, imgH = canvas.height;
+            const { data } = await worker.recognize(canvas);
+            const words = (data.words || []).filter(w => w.text && w.text.trim());
+            const confidence = Math.round(data.confidence || 0);
+            setPagePreview(canvas, pageNum, numPages);
+            updateStats(pageNum, confidence);
+            addLog('Page ' + pageNum + ' — ' + confidence + '% confidence',
+              confidence >= 80 ? 'ok' : 'active');
+
+            const jpegBytes = await canvasToJpegBytes(canvas, quality);
+            releaseCanvas(canvas);
+
+            const scale = Math.min(PAGE_W / imgW, PAGE_H / imgH);
+            const drawW = imgW * scale, drawH = imgH * scale;
+            const drawX = (PAGE_W - drawW) / 2, drawY = (PAGE_H - drawH) / 2;
+            const chunkPage = chunkDoc.addPage([PAGE_W, PAGE_H]);
+            chunkPage.drawImage(await chunkDoc.embedJpg(jpegBytes),
+              { x: drawX, y: drawY, width: drawW, height: drawH });
+            await addInvisibleTextLayer(chunkPage, words, imgW, imgH, drawX, drawY, drawW, drawH);
+          }
+
+          chunkPdfs.push(await chunkDoc.save());
+        }
+
+        // Merge all chunk PDFs (no re-OCR)
+        setProgress(96, 'Merging ' + totalChunks + ' PDFs…');
+        addLog('Merging ' + totalChunks + ' chunks into final PDF', 'sync');
+        const mergedDoc = await PDFDocument.create();
+        for (const chunkBytes of chunkPdfs) {
+          const chunkDoc = await PDFDocument.load(chunkBytes);
+          const pages = await mergedDoc.copyPages(chunkDoc, chunkDoc.getPageIndices());
+          pages.forEach(p => mergedDoc.addPage(p));
+        }
+
+        setProgress(99, 'Saving final PDF…');
+        triggerDownload(await mergedDoc.save(), ocrFilename);
+
       } catch (err) {
         console.error(err);
         releaseKeepAlive();
         showSection('upload');
         showError('Error: ' + (err.message || 'Unknown error'));
+      } finally {
+        if (worker) await worker.terminate().catch(() => {});
+        if (pdfjsDoc) pdfjsDoc.destroy();
       }
     }
 
