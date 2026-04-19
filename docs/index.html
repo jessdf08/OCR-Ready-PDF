@@ -58,6 +58,7 @@
     /* ---- Mode toggle ---- */
     .mode-toggle {
       display: flex;
+      flex-wrap: wrap;
       background: var(--bg);
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -67,13 +68,13 @@
     }
 
     .mode-toggle button {
-      flex: 1;
+      flex: 1 1 calc(50% - 3px);
       min-height: 36px;
-      padding: 8px;
+      padding: 8px 4px;
       border: none;
       border-radius: 6px;
       background: transparent;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 500;
       color: var(--muted);
       cursor: pointer;
@@ -291,6 +292,33 @@
       .warn-box { color: #ffd60a; }
     }
 
+    /* ---- Split options ---- */
+    .split-options {
+      margin-top: 14px;
+      padding: 12px 14px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .split-options label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .split-options input[type="number"] {
+      position: static;
+      width: 64px; height: auto;
+      opacity: 1; overflow: visible;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      background: var(--card);
+    }
+    #split-page-info { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+    /* ---- Split links list ---- */
+    .split-links { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; }
+
     /* ---- Done section ---- */
     #done-section { display: none; }
     .done-heading { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
@@ -314,25 +342,52 @@
     <!-- Upload form -->
     <div id="upload-section">
       <div class="mode-toggle">
-        <button type="button" id="btn-mode-pack" class="active" onclick="setMode('pack')">Images → OCR</button>
-        <button type="button" id="btn-mode-pdf" onclick="setMode('pdf')">PDF → OCR</button>
+        <button type="button" id="btn-mode-images" class="active" onclick="setMode('images')">Images → PDF</button>
+        <button type="button" id="btn-mode-split"  onclick="setMode('split')">Split PDF</button>
+        <button type="button" id="btn-mode-pdf"    onclick="setMode('pdf')">PDF → OCR</button>
+        <button type="button" id="btn-mode-combine" onclick="setMode('combine')">Combine PDF</button>
       </div>
-      <p class="mode-hint" id="mode-hint">Images → searchable PDF via 2-step pack then OCR — best for large batches</p>
+      <p class="mode-hint" id="mode-hint">Pack images into a PDF — fast, no OCR</p>
 
       <div class="file-area">
-        <div id="picker-pack">
-          <label class="file-label" for="input-pack">Choose images</label>
-          <input type="file" id="input-pack" accept="image/*" multiple onchange="onFilesChosen(this)">
-          <div class="file-name" id="name-pack"></div>
+        <!-- Mode 1: Images → PDF -->
+        <div id="picker-images">
+          <label class="file-label" for="input-images">Choose images</label>
+          <input type="file" id="input-images" accept="image/*" multiple onchange="onFilesChosen(this,'images')">
+          <div class="file-name" id="name-images"></div>
         </div>
+
+        <!-- Mode 2: Split PDF -->
+        <div id="picker-split" style="display:none">
+          <label class="file-label" for="input-split">Choose PDF to split</label>
+          <input type="file" id="input-split" accept="application/pdf,.pdf" onchange="onFilesChosen(this,'split')">
+          <div class="file-name" id="name-split"></div>
+          <div class="split-options" id="split-options" style="display:none">
+            <label>
+              Split into
+              <input type="number" id="split-parts" min="2" max="500" value="2">
+              parts
+            </label>
+            <div id="split-page-info"></div>
+          </div>
+        </div>
+
+        <!-- Mode 3: PDF → OCR -->
         <div id="picker-pdf" style="display:none">
           <label class="file-label" for="input-pdf">Choose PDF</label>
-          <input type="file" id="input-pdf" accept="application/pdf,.pdf" onchange="onFilesChosen(this)">
+          <input type="file" id="input-pdf" accept="application/pdf,.pdf" onchange="onFilesChosen(this,'pdf')">
           <div class="file-name" id="name-pdf"></div>
+        </div>
+
+        <!-- Mode 4: Combine PDF -->
+        <div id="picker-combine" style="display:none">
+          <label class="file-label" for="input-combine">Choose up to 20 PDFs (in order)</label>
+          <input type="file" id="input-combine" accept="application/pdf,.pdf" multiple onchange="onFilesChosen(this,'combine')">
+          <div class="file-name" id="name-combine"></div>
         </div>
       </div>
 
-      <button class="btn-primary" id="btn-convert" disabled onclick="startConversion()">Convert</button>
+      <button class="btn-primary" id="btn-convert" disabled onclick="startConversion()">Go</button>
     </div>
 
     <!-- Processing status -->
@@ -365,29 +420,28 @@
       <p class="status-note" style="margin-top:8px;opacity:0.6">You can switch apps — processing continues in the background.</p>
     </div>
 
-    <!-- Pack done: download backup + start OCR -->
-    <div id="pack-done-section" style="display:none">
-      <div class="done-heading">Step 1 Complete</div>
-      <div class="done-sub"><span id="pack-done-pages">0</span> images packed into a PDF.</div>
-      <a class="btn-download" id="pack-download-link" href="#" style="background:var(--muted)">Download Packed PDF (backup)</a>
-      <p class="status-note" style="margin:12px 0 16px">Save this as a backup in case Step 2 crashes, then tap below to start OCR.</p>
-      <button class="btn-primary" onclick="runOcrOnPacked()">Start OCR (Step 2)</button>
-      <button class="btn-secondary" style="margin-top:10px" onclick="resetApp()">Start over</button>
+    <!-- Split done: one link per part -->
+    <div id="split-done-section" style="display:none">
+      <div class="done-heading">Split Complete</div>
+      <div class="done-sub" id="split-done-sub"></div>
+      <div class="split-links" id="split-links"></div>
+      <p class="status-note" style="margin-bottom:16px">On iPhone: tap each part, then share sheet &rarr; Save to Files.</p>
+      <button class="btn-secondary" onclick="resetApp()">Start over</button>
     </div>
 
-    <!-- Done: download -->
+    <!-- Done: single file download -->
     <div id="done-section" style="display:none">
       <div class="done-heading">Done!</div>
-      <div class="done-sub">Your searchable PDF is ready.</div>
-      <div class="stat-row">
+      <div class="done-sub" id="done-sub">Your PDF is ready.</div>
+      <div class="stat-row" id="done-stat-row">
         <div class="stat-chip">Pages<strong id="done-pages">0</strong></div>
-        <div class="stat-chip">Confidence<strong id="done-conf">—</strong></div>
+        <div class="stat-chip" id="done-conf-chip">Confidence<strong id="done-conf">—</strong></div>
       </div>
-      <a class="btn-download" id="download-link" href="#">Download Searchable PDF</a>
+      <a class="btn-download" id="download-link" href="#">Download PDF</a>
       <p class="status-note" style="margin-bottom:16px">
-        On iPhone: tap above, then share sheet &rarr; save to Files.
+        On iPhone: tap above, then share sheet &rarr; Save to Files.
       </p>
-      <button class="btn-secondary" onclick="resetApp()">Convert another file</button>
+      <button class="btn-secondary" onclick="resetApp()">Start over</button>
     </div>
 
     <p class="footer-note" id="app-footer">All processing happens in your browser &middot; No files are uploaded</p>
@@ -404,12 +458,11 @@
       'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 
     // ─── State ───────────────────────────────────────────────────────────────
-    let currentMode = 'pack';
+    let currentMode = 'images';
     let lastDownloadUrl = null;
     let _wakeLock = null;
     let _bgAudio = null;
-    let packedPdfBytes = null;
-    let packedFilename = null;
+    let splitPartUrls = []; // object URLs for split parts — revoked on reset
 
     // Output page size: 8.5" × 11" at 72 pts/inch
     const PAGE_W = 612;
@@ -452,7 +505,7 @@
 
     // ─── UI helpers ──────────────────────────────────────────────────────────
     function showSection(name) {
-      ['upload', 'status', 'pack-done', 'done'].forEach(id => {
+      ['upload', 'status', 'split-done', 'done'].forEach(id => {
         document.getElementById(id + '-section').style.display = id === name ? 'block' : 'none';
       });
       const isStatus = name === 'status';
@@ -554,29 +607,31 @@
 
     // ─── Mode toggle ─────────────────────────────────────────────────────────
     const MODE_HINTS = {
-      pack: 'Images → searchable PDF via 2-step pack then OCR — best for large batches',
-      pdf:  'PDF → searchable PDF (OCR included)',
+      images:  'Pack images into a PDF — fast, no OCR',
+      split:   'Split a PDF into multiple parts by page range',
+      pdf:     'Add searchable text layer to a scanned PDF via OCR',
+      combine: 'Merge up to 20 PDFs in order — preserves existing OCR text',
     };
+
+    const MODES = ['images', 'split', 'pdf', 'combine'];
 
     function setMode(mode) {
       currentMode = mode;
-      document.getElementById('picker-pack').style.display = mode === 'pack' ? '' : 'none';
-      document.getElementById('picker-pdf').style.display  = mode === 'pdf'  ? '' : 'none';
-      document.getElementById('btn-mode-pack').classList.toggle('active', mode === 'pack');
-      document.getElementById('btn-mode-pdf').classList.toggle('active',  mode === 'pdf');
-      ['pack', 'pdf'].forEach(m => {
+      MODES.forEach(m => {
+        document.getElementById('picker-' + m).style.display = m === mode ? '' : 'none';
+        document.getElementById('btn-mode-' + m).classList.toggle('active', m === mode);
         if (m !== mode) {
           document.getElementById('input-' + m).value = '';
           document.getElementById('name-' + m).textContent = '';
         }
       });
+      if (mode === 'split') document.getElementById('split-options').style.display = 'none';
       document.getElementById('mode-hint').textContent = MODE_HINTS[mode];
       hideError();
       updateConvertButton();
     }
 
-    function onFilesChosen(input) {
-      const which = input.id.replace('input-', '');
+    function onFilesChosen(input, which) {
       const nameEl = document.getElementById('name-' + which);
       if (input.files.length === 0) {
         nameEl.textContent = '';
@@ -585,165 +640,41 @@
       } else {
         nameEl.textContent = input.files.length + ' files selected';
       }
+      if (which === 'split' && input.files.length === 1) {
+        document.getElementById('split-options').style.display = '';
+        document.getElementById('split-page-info').textContent = '';
+        // Count pages in background so user knows how many parts are possible
+        (async () => {
+          try {
+            const buf = await input.files[0].arrayBuffer();
+            const doc = await PDFLib.PDFDocument.load(buf);
+            const n = doc.getPageCount();
+            document.getElementById('split-page-info').textContent = n + ' pages detected';
+            document.getElementById('split-parts').max = n;
+          } catch(e) {}
+        })();
+      }
       hideError();
       updateConvertButton();
     }
 
     function updateConvertButton() {
-      const inputId = 'input-' + currentMode;
-      document.getElementById('btn-convert').disabled =
-        document.getElementById(inputId).files.length === 0;
+      const inputEl = document.getElementById('input-' + currentMode);
+      const hasFiles = inputEl && inputEl.files.length > 0;
+      document.getElementById('btn-convert').disabled = !hasFiles;
     }
-
-    // ─── Pack intermediate step ───────────────────────────────────────────────
-    function showPackDone(pdfBytes, filename) {
-      releaseKeepAlive();
-      packedPdfBytes = pdfBytes;
-      packedFilename = filename;
-      document.getElementById('pack-done-pages').textContent = totalPagesProcessed;
-      if (lastDownloadUrl) URL.revokeObjectURL(lastDownloadUrl);
-      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-      lastDownloadUrl = URL.createObjectURL(blob);
-      const link = document.getElementById('pack-download-link');
-      link.href = lastDownloadUrl;
-      link.download = filename;
-      showSection('pack-done');
-    }
-
-    async function runOcrOnPacked() {
-      if (!packedPdfBytes) return;
-      const CHUNK_SIZE = 50;
-      const TARGET_BYTES = 90 * 1024 * 1024;
-      const { PDFDocument } = PDFLib;
-
-      const blob = new Blob([packedPdfBytes], { type: 'application/pdf' });
-      const ocrFilename = (packedFilename || 'images-packed.pdf').replace(/\.pdf$/i, '-ocr.pdf');
-      packedPdfBytes = null;
-      packedFilename = null;
-      totalPagesProcessed = 0; totalConfidenceSum = 0; confidenceCount = 0;
-      showSection('status');
-      setProgress(0, 'Initializing OCR engine…');
-      addLog('Starting OCR', 'sync');
-      document.getElementById('status-note').textContent = 'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.';
-      await acquireKeepAlive();
-
-      let pdfjsDoc, worker;
-      try {
-        const arrayBuffer = await blob.arrayBuffer();
-        try {
-          pdfjsDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        } catch (e) {
-          throw new Error('Could not open the packed PDF.');
-        }
-
-        const numPages = pdfjsDoc.numPages;
-        const totalChunks = Math.ceil(numPages / CHUNK_SIZE);
-        let globalCurrentPage = 0;
-
-        worker = await Tesseract.createWorker('eng', 1, {
-          logger: m => {
-            if (m.status === 'recognizing text') {
-              const pct = ((globalCurrentPage + m.progress) / numPages) * 95;
-              setProgress(pct, 'OCR — page ' + (globalCurrentPage + 1) + ' of ' + numPages + '…');
-            }
-          }
-        });
-
-        // Sample first 3 pages at full quality to calibrate JPEG compression
-        const SAMPLE_SIZE = Math.min(3, numPages);
-        let quality = 1.0;
-        let sampleTotalBytes = 0;
-        for (let i = 0; i < SAMPLE_SIZE; i++) {
-          const pg = await pdfjsDoc.getPage(i + 1);
-          const vp = pg.getViewport({ scale: 2.0 });
-          const canvas = document.createElement('canvas');
-          canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
-          await pg.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
-          sampleTotalBytes += (await canvasToJpegBytes(canvas, 1.0)).byteLength;
-          releaseCanvas(canvas);
-        }
-        const projected = (sampleTotalBytes / SAMPLE_SIZE) * numPages;
-        if (projected > TARGET_BYTES) quality = Math.max(0.3, TARGET_BYTES / projected);
-
-        const chunkPdfs = [];
-
-        for (let chunk = 0; chunk < totalChunks; chunk++) {
-          const startPage = chunk * CHUNK_SIZE + 1;
-          const endPage = Math.min((chunk + 1) * CHUNK_SIZE, numPages);
-          const chunkLabel = 'chunk ' + (chunk + 1) + ' of ' + totalChunks;
-          addLog('OCR ' + chunkLabel + ' (pages ' + startPage + '–' + endPage + ')', 'sync');
-
-          const chunkDoc = await PDFDocument.create();
-
-          for (let pageNum = startPage; pageNum <= endPage; pageNum++) {
-            globalCurrentPage = pageNum - 1;
-            setProgress((globalCurrentPage / numPages) * 95,
-              'Rendering page ' + pageNum + ' of ' + numPages + ' (' + chunkLabel + ')…');
-            document.getElementById('status-note').textContent =
-              'Page ' + pageNum + ' of ' + numPages + ' · ' + chunkLabel;
-
-            const pdfjsPage = await pdfjsDoc.getPage(pageNum);
-            const vp = pdfjsPage.getViewport({ scale: 2.0 });
-            const canvas = document.createElement('canvas');
-            canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
-            await pdfjsPage.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
-
-            const imgW = canvas.width, imgH = canvas.height;
-            const { data } = await worker.recognize(canvas);
-            const words = (data.words || []).filter(w => w.text && w.text.trim());
-            const confidence = Math.round(data.confidence || 0);
-            setPagePreview(canvas, pageNum, numPages);
-            updateStats(pageNum, confidence);
-            addLog('Page ' + pageNum + ' — ' + confidence + '% confidence',
-              confidence >= 80 ? 'ok' : 'active');
-
-            const jpegBytes = await canvasToJpegBytes(canvas, quality);
-            releaseCanvas(canvas);
-
-            const scale = Math.min(PAGE_W / imgW, PAGE_H / imgH);
-            const drawW = imgW * scale, drawH = imgH * scale;
-            const drawX = (PAGE_W - drawW) / 2, drawY = (PAGE_H - drawH) / 2;
-            const chunkPage = chunkDoc.addPage([PAGE_W, PAGE_H]);
-            chunkPage.drawImage(await chunkDoc.embedJpg(jpegBytes),
-              { x: drawX, y: drawY, width: drawW, height: drawH });
-            await addInvisibleTextLayer(chunkPage, words, imgW, imgH, drawX, drawY, drawW, drawH);
-          }
-
-          chunkPdfs.push(await chunkDoc.save());
-        }
-
-        // Merge all chunk PDFs (no re-OCR)
-        setProgress(96, 'Merging ' + totalChunks + ' PDFs…');
-        addLog('Merging ' + totalChunks + ' chunks into final PDF', 'sync');
-        const mergedDoc = await PDFDocument.create();
-        for (const chunkBytes of chunkPdfs) {
-          const chunkDoc = await PDFDocument.load(chunkBytes);
-          const pages = await mergedDoc.copyPages(chunkDoc, chunkDoc.getPageIndices());
-          pages.forEach(p => mergedDoc.addPage(p));
-        }
-
-        setProgress(99, 'Saving final PDF…');
-        triggerDownload(await mergedDoc.save(), ocrFilename);
-
-      } catch (err) {
-        console.error(err);
-        releaseKeepAlive();
-        showSection('upload');
-        showError('Error: ' + (err.message || 'Unknown error'));
-      } finally {
-        if (worker) await worker.terminate().catch(() => {});
-        if (pdfjsDoc) pdfjsDoc.destroy();
-      }
-    }
-
     // ─── Download / reset ────────────────────────────────────────────────────
-    function triggerDownload(pdfBytes, filename) {
+    function triggerDownload(pdfBytes, filename, showConf) {
       releaseKeepAlive();
-      const dp = document.getElementById('done-pages');
-      const dc = document.getElementById('done-conf');
-      if (dp) dp.textContent = totalPagesProcessed;
-      if (dc) dc.textContent = confidenceCount > 0
-        ? Math.round(totalConfidenceSum / confidenceCount) + '%' : '—';
+      document.getElementById('done-pages').textContent = totalPagesProcessed;
+      const confChip = document.getElementById('done-conf-chip');
+      if (showConf && confidenceCount > 0) {
+        document.getElementById('done-conf').textContent =
+          Math.round(totalConfidenceSum / confidenceCount) + '%';
+        if (confChip) confChip.style.display = '';
+      } else {
+        if (confChip) confChip.style.display = 'none';
+      }
       if (lastDownloadUrl) URL.revokeObjectURL(lastDownloadUrl);
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       lastDownloadUrl = URL.createObjectURL(blob);
@@ -753,10 +684,31 @@
       showSection('done');
     }
 
+    function triggerSplitDownload(parts, baseName) {
+      releaseKeepAlive();
+      splitPartUrls.forEach(u => URL.revokeObjectURL(u));
+      splitPartUrls = [];
+      const container = document.getElementById('split-links');
+      container.innerHTML = '';
+      parts.forEach((bytes, i) => {
+        const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+        splitPartUrls.push(url);
+        const a = document.createElement('a');
+        a.className = 'btn-download';
+        a.href = url;
+        a.download = baseName + ' (Part ' + (i + 1) + ').pdf';
+        a.textContent = 'Download Part ' + (i + 1) + ' of ' + parts.length;
+        container.appendChild(a);
+      });
+      document.getElementById('split-done-sub').textContent =
+        parts.length + ' parts ready — tap each to save.';
+      showSection('split-done');
+    }
+
     function resetApp() {
       if (lastDownloadUrl) { URL.revokeObjectURL(lastDownloadUrl); lastDownloadUrl = null; }
-      packedPdfBytes = null;
-      packedFilename = null;
+      splitPartUrls.forEach(u => URL.revokeObjectURL(u));
+      splitPartUrls = [];
       location.reload();
     }
 
@@ -1005,6 +957,44 @@
       return await pdfDoc.save();
     }
 
+    // ─── New mode pipelines ───────────────────────────────────────────────────
+    async function runSplitMode(file, numParts) {
+      const { PDFDocument } = PDFLib;
+      setProgress(0, 'Loading PDF…');
+      const srcDoc = await PDFDocument.load(await file.arrayBuffer());
+      const totalPages = srcDoc.getPageCount();
+      numParts = Math.max(2, Math.min(numParts, totalPages));
+      const pagesPerPart = Math.ceil(totalPages / numParts);
+      const parts = [];
+
+      for (let p = 0; p < numParts; p++) {
+        const start = p * pagesPerPart;
+        const end = Math.min(start + pagesPerPart, totalPages);
+        if (start >= totalPages) break;
+        setProgress(((p + 1) / numParts) * 99, 'Creating part ' + (p + 1) + ' of ' + numParts + '…');
+        const partDoc = await PDFDocument.create();
+        const indices = Array.from({ length: end - start }, (_, i) => start + i);
+        const pages = await partDoc.copyPages(srcDoc, indices);
+        pages.forEach(pg => partDoc.addPage(pg));
+        parts.push(await partDoc.save());
+      }
+      return parts;
+    }
+
+    async function runCombineMode(files) {
+      const { PDFDocument } = PDFLib;
+      const mergedDoc = await PDFDocument.create();
+      for (let i = 0; i < files.length; i++) {
+        setProgress((i / files.length) * 99, 'Merging file ' + (i + 1) + ' of ' + files.length + '…');
+        const srcDoc = await PDFDocument.load(await files[i].arrayBuffer());
+        const pages = await mergedDoc.copyPages(srcDoc, srcDoc.getPageIndices());
+        pages.forEach(p => mergedDoc.addPage(p));
+        totalPagesProcessed += srcDoc.getPageCount();
+      }
+      setProgress(99, 'Saving…');
+      return await mergedDoc.save();
+    }
+
     // ─── Entry point ─────────────────────────────────────────────────────────
     async function startConversion() {
       hideError();
@@ -1012,48 +1002,66 @@
       const inputEl = document.getElementById('input-' + currentMode);
       const files = Array.from(inputEl.files);
 
-      if (!files.length) { showError('No files selected. If you chose images and see this, iOS may have hit its file-picker limit — try selecting fewer at once.'); return; }
+      if (!files.length) { showError('No files selected.'); return; }
 
-      if (currentMode === 'pdf') {
-        if (files.length !== 1) { showError('Please select exactly one PDF file.'); return; }
-        if (!files[0].name.toLowerCase().endsWith('.pdf') && files[0].type !== 'application/pdf') {
-          showError('Selected file does not appear to be a PDF.'); return;
+      // Per-mode validation
+      if (currentMode === 'split') {
+        if (files.length !== 1 || (!files[0].name.toLowerCase().endsWith('.pdf') && files[0].type !== 'application/pdf')) {
+          showError('Please select exactly one PDF file.'); return;
         }
       }
+      if (currentMode === 'pdf') {
+        if (files.length !== 1 || (!files[0].name.toLowerCase().endsWith('.pdf') && files[0].type !== 'application/pdf')) {
+          showError('Please select exactly one PDF file.'); return;
+        }
+      }
+      if (currentMode === 'combine') {
+        if (files.length < 2) { showError('Please select at least 2 PDF files to combine.'); return; }
+        if (files.length > 20) { showError('Maximum 20 PDF files at a time.'); return; }
+      }
 
-      // Reset stats for new run
-      totalPagesProcessed = 0;
-      totalConfidenceSum = 0;
-      confidenceCount = 0;
+      totalPagesProcessed = 0; totalConfidenceSum = 0; confidenceCount = 0;
       showSection('status');
       setProgress(0, 'Starting…');
-      addLog('Starting', 'sync');
-      document.getElementById('status-note').textContent = currentMode === 'pack' ? 'Packing images — you can switch apps.' : 'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.';
-      // Yield to browser so it repaints the status screen before heavy work begins
+      addLog('Starting — ' + currentMode + ' mode', 'sync');
+      document.getElementById('status-note').textContent =
+        currentMode === 'pdf' ? 'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.'
+                              : 'You can switch apps — processing continues in the background.';
       await new Promise(resolve => requestAnimationFrame(resolve));
       await acquireKeepAlive();
 
       try {
-        if (currentMode === 'pack') {
+        if (currentMode === 'images') {
           setProgress(0, 'Packing images…');
-          const packedBytes = await runPackMode(files);
-          showPackDone(packedBytes, 'images-packed.pdf');
-          return;
+          const pdfBytes = await runPackMode(files);
+          totalPagesProcessed = files.length;
+          triggerDownload(pdfBytes, 'images.pdf', false);
+
+        } else if (currentMode === 'split') {
+          const numParts = parseInt(document.getElementById('split-parts').value, 10) || 2;
+          const baseName = files[0].name.replace(/\.pdf$/i, '');
+          const parts = await runSplitMode(files[0], numParts);
+          triggerSplitDownload(parts, baseName);
+
+        } else if (currentMode === 'pdf') {
+          const outputName = files[0].name.replace(/\.pdf$/i, '') + '-ocr.pdf';
+          const pdfBytes = await runPdfMode(files[0]);
+          triggerDownload(pdfBytes, outputName, true);
+
+        } else if (currentMode === 'combine') {
+          const baseName = files[0].name.replace(/\.pdf$/i, '');
+          const pdfBytes = await runCombineMode(files);
+          triggerDownload(pdfBytes, baseName + '-combined.pdf', false);
         }
-        const outputName = files[0].name.replace(/\.pdf$/i, '') + '-ocr.pdf';
-        const pdfBytes = await runPdfMode(files[0]);
-        triggerDownload(pdfBytes, outputName);
 
       } catch (err) {
         console.error('Conversion error:', err);
         releaseKeepAlive();
         showSection('upload');
         const msg = err.message || 'Unknown error. Check the browser console.';
-        showError(
-          msg.toLowerCase().includes('memory')
-            ? 'Out of memory — try fewer pages or smaller images.'
-            : 'Error: ' + msg
-        );
+        showError(msg.toLowerCase().includes('memory')
+          ? 'Out of memory — try fewer pages or smaller images.'
+          : 'Error: ' + msg);
       }
     }
   </script>
