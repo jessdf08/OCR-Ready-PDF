@@ -491,7 +491,8 @@
         </label>
       </div>
 
-      <button class="btn-primary" onclick="downloadPackedPdf()">Download</button>
+      <button class="btn-primary" onclick="downloadPackedPdf()">Download PDF</button>
+      <button class="btn-primary" style="margin-top:10px; background:#34c759" onclick="runOcrOnPacked()">Run OCR →</button>
       <button class="btn-secondary" style="margin-top:8px" onclick="resetApp()">Start over</button>
     </div>
 
@@ -762,6 +763,28 @@
     }
 
     // ─── Images-done download choice ─────────────────────────────────────────
+    async function runOcrOnPacked() {
+      if (!packedPdfBytes) return;
+      const blob = new Blob([packedPdfBytes], { type: 'application/pdf' });
+      packedPdfBytes = null;
+      totalPagesProcessed = 0; totalConfidenceSum = 0; confidenceCount = 0;
+      showSection('status');
+      setProgress(0, 'Initializing OCR engine…');
+      addLog('Starting OCR on packed PDF', 'sync');
+      document.getElementById('status-note').textContent =
+        'First use downloads ~15 MB of OCR data — cached after that. Keep this tab open.';
+      await acquireKeepAlive();
+      try {
+        const pdfBytes = await runPdfMode(blob);
+        triggerDownload(pdfBytes, 'images-ocr.pdf', true);
+      } catch (err) {
+        console.error(err);
+        releaseKeepAlive();
+        showSection('upload');
+        showError('Error: ' + (err.message || 'Unknown error'));
+      }
+    }
+
     function showImagesDone(pdfBytes, pageCount) {
       releaseKeepAlive();
       packedPdfBytes = pdfBytes;
