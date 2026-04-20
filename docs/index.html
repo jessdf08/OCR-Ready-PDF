@@ -1204,10 +1204,9 @@
       }
 
       const totalPages = srcDoc.getPageCount();
-      const SAMPLE_SIZE = Math.min(3, totalPages);
 
-      // Extract raw JPEG bytes from first DCTDecode XObject on a page
-      function getPageJpegBytes(doc, pageIndex) {
+      // Find the DCTDecode image stream object on a page (returns PDFRawStream or null)
+      function getPageImageStream(doc, pageIndex) {
         const page = doc.getPage(pageIndex);
         const resources = page.node.Resources();
         if (!resources) return null;
@@ -1217,49 +1216,31 @@
           const obj = doc.context.lookup(val);
           if (!obj || !obj.dict || !obj.contents) continue;
           const filter = obj.dict.lookup(PDFName.of('Filter'));
-          if (filter && filter.toString().includes('DCTDecode')) return obj.contents;
+          if (filter && filter.toString().includes('DCTDecode')) return obj;
         }
         return null;
       }
 
-      // Decode JPEG bytes to canvas for re-encoding
-      async function jpegBytesToCanvas(bytes) {
-        const blob = new Blob([bytes], { type: 'image/jpeg' });
-        const url = URL.createObjectURL(blob);
-        const img = new Image();
-        await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
-        URL.revokeObjectURL(url);
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
-        canvas.getContext('2d').drawImage(img, 0, 0);
-        return canvas;
-      }
-
-      // Adaptive quality: sample first pages at quality 1.0 to project output size
-      let sampleTotalBytes = 0;
-      let sampleCount = 0;
+      // Estimate quality from raw JPEG sizes already in the PDF (no re-encoding needed)
+      const SAMPLE_SIZE = Math.min(5, totalPages);
+      let sampleRawBytes = 0, sampleCount = 0;
       for (let i = 0; i < SAMPLE_SIZE; i++) {
-        setProgress(2 + (i / SAMPLE_SIZE) * 8, 'Sampling page ' + (i + 1) + '…');
-        const rawJpeg = getPageJpegBytes(srcDoc, i);
-        if (!rawJpeg) continue;
-        const canvas = await jpegBytesToCanvas(rawJpeg);
-        const reencoded = await canvasToJpegBytes(canvas, 1.0);
-        releaseCanvas(canvas);
-        sampleTotalBytes += reencoded.byteLength;
-        sampleCount++;
+        const stream = getPageImageStream(srcDoc, i);
+        if (stream) { sampleRawBytes += stream.contents.byteLength; sampleCount++; }
       }
 
-      let quality = 1.0;
+      let quality = 0.82;
       if (sampleCount > 0) {
-        const projected = (sampleTotalBytes / sampleCount) * totalPages;
-        addLog('Projected ' + (projected / 1e6).toFixed(1) + ' MB at quality 1.0', 'sync');
-        if (projected > TARGET) {
-          quality = Math.max(0.3, Math.sqrt(TARGET / projected));
-          addLog('Adjusting quality to ' + quality.toFixed(2), 'sync');
-        }
+        const projected = (sampleRawBytes / sampleCount) * totalPages;
+        addLog('Projected image data: ' + (projected / 1e6).toFixed(1) + ' MB', 'sync');
+        quality = projected > TARGET
+          ? Math.max(0.3, Math.min(0.92, Math.sqrt(TARGET / projected)))
+          : 0.92;
+        addLog('Quality: ' + quality.toFixed(2), 'sync');
       }
 
-      // Build output: copyPages (preserves text layers), then replace image XObject
+      // Build output: copyPages preserves text layers; mutate the copied stream's
+      // contents in-place so no orphaned large objects accumulate in the context.
       const outDoc = await PDFDocument.create();
       for (let i = 0; i < totalPages; i++) {
         setProgress(10 + (i / totalPages) * 89, 'Compressing page ' + (i + 1) + ' of ' + totalPages + '…');
@@ -1268,27 +1249,33 @@
         outDoc.addPage(copiedPage);
         totalPagesProcessed = i + 1;
 
-        const rawJpeg = getPageJpegBytes(srcDoc, i);
-        if (!rawJpeg) continue;
-
-        const canvas = await jpegBytesToCanvas(rawJpeg);
-        const newJpeg = await canvasToJpegBytes(canvas, quality);
-        releaseCanvas(canvas);
-        const newImg = await outDoc.embedJpg(newJpeg);
-
-        // Replace the DCTDecode XObject in the copied page's resources
+        // Find the image stream in the copied page (now lives in outDoc.context)
         const resources = copiedPage.node.Resources();
         if (!resources) continue;
         const xObjDict = resources.lookup(PDFName.of('XObject'));
         if (!xObjDict || typeof xObjDict.entries !== 'function') continue;
-        for (const [name, val] of xObjDict.entries()) {
+
+        for (const [, val] of xObjDict.entries()) {
           const obj = outDoc.context.lookup(val);
           if (!obj || !obj.dict || !obj.contents) continue;
           const filter = obj.dict.lookup(PDFName.of('Filter'));
-          if (filter && filter.toString().includes('DCTDecode')) {
-            xObjDict.set(name, newImg.ref);
-            break;
-          }
+          if (!filter || !filter.toString().includes('DCTDecode')) continue;
+
+          // Decode JPEG → canvas → re-encode at target quality
+          const blob = new Blob([obj.contents], { type: 'image/jpeg' });
+          const url = URL.createObjectURL(blob);
+          const img = new Image();
+          await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+          URL.revokeObjectURL(url);
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+          canvas.getContext('2d').drawImage(img, 0, 0);
+          const newJpeg = await canvasToJpegBytes(canvas, quality);
+          canvas.width = 0; canvas.height = 0;
+
+          // Replace stream bytes in-place — no new object added to context
+          obj.contents = newJpeg;
+          break;
         }
       }
 
