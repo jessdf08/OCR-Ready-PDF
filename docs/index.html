@@ -1303,7 +1303,13 @@
       hideError();
 
       const inputEl = document.getElementById('input-' + currentMode);
-      const files = Array.from(inputEl.files);
+      let files = Array.from(inputEl.files);
+      if (currentMode === 'images' && files.length > 1) {
+        // Read lastModified once per file (O(n) bridge calls) then sort — avoids O(n log n) iOS bridge I/O
+        const tagged = files.map(f => ({ f, m: f.lastModified }));
+        tagged.sort((a, b) => a.m - b.m);
+        files = tagged.map(t => t.f);
+      }
 
       if (!files.length) { showError('No files selected.'); return; }
 
