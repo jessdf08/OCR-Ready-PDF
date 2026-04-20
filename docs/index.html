@@ -1205,18 +1205,21 @@
 
       const totalPages = srcDoc.getPageCount();
 
-      // Find the DCTDecode image stream object on a page (returns PDFRawStream or null)
+      // Find the JPEG image stream on a page by JPEG magic bytes (FF D8 FF).
+      // Avoids fragile dict.lookup / toString() calls on internal pdf-lib objects.
       function getPageImageStream(doc, pageIndex) {
         const page = doc.getPage(pageIndex);
         const resources = page.node.Resources();
         if (!resources) return null;
-        const xObjDict = resources.lookup(PDFName.of('XObject'));
+        let xObjDict;
+        try { xObjDict = resources.lookup(PDFName.of('XObject')); } catch(e) { return null; }
         if (!xObjDict || typeof xObjDict.entries !== 'function') return null;
         for (const [, val] of xObjDict.entries()) {
-          const obj = doc.context.lookup(val);
-          if (!obj || !obj.dict || !obj.contents) continue;
-          const filter = obj.dict.lookup(PDFName.of('Filter'));
-          if (filter && filter.toString().includes('DCTDecode')) return obj;
+          let obj;
+          try { obj = doc.context.lookup(val); } catch(e) { continue; }
+          if (!obj || !(obj.contents instanceof Uint8Array) || obj.contents.length < 3) continue;
+          // JPEG magic bytes: FF D8 FF
+          if (obj.contents[0] === 0xFF && obj.contents[1] === 0xD8 && obj.contents[2] === 0xFF) return obj;
         }
         return null;
       }
@@ -1256,10 +1259,11 @@
         if (!xObjDict || typeof xObjDict.entries !== 'function') continue;
 
         for (const [, val] of xObjDict.entries()) {
-          const obj = outDoc.context.lookup(val);
-          if (!obj || !obj.dict || !obj.contents) continue;
-          const filter = obj.dict.lookup(PDFName.of('Filter'));
-          if (!filter || !filter.toString().includes('DCTDecode')) continue;
+          let obj;
+          try { obj = outDoc.context.lookup(val); } catch(e) { continue; }
+          if (!obj || !(obj.contents instanceof Uint8Array) || obj.contents.length < 3) continue;
+          // JPEG magic bytes: FF D8 FF
+          if (!(obj.contents[0] === 0xFF && obj.contents[1] === 0xD8 && obj.contents[2] === 0xFF)) continue;
 
           // Decode JPEG → canvas → re-encode at target quality
           const blob = new Blob([obj.contents], { type: 'image/jpeg' });
@@ -1270,11 +1274,9 @@
           const canvas = document.createElement('canvas');
           canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
           canvas.getContext('2d').drawImage(img, 0, 0);
-          const newJpeg = await canvasToJpegBytes(canvas, quality);
+          // canvasToJpegBytes returns ArrayBuffer — convert to Uint8Array for pdf-lib
+          obj.contents = new Uint8Array(await canvasToJpegBytes(canvas, quality));
           canvas.width = 0; canvas.height = 0;
-
-          // Replace stream bytes in-place — no new object added to context
-          obj.contents = newJpeg;
           break;
         }
       }
